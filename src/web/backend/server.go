@@ -72,25 +72,10 @@ type Server struct {
 	exploPath      string
 	mux            *http.ServeMux
 	server         *http.Server
-	authStore      *AuthStore
-	sessionManager *SessionManager
 	manualRun      manualRunState
 }
 
 func NewServer(addr, configPath, exploPath string) *Server {
-	sessionManager := NewSessionManager(
-		NewInMemorySessionStore(),
-		1*time.Hour,
-		7*(24*time.Hour),
-		"session",
-	)
-
-	authStore := NewAuthStore(
-	os.Getenv("UI_USERNAME"),
-	os.Getenv("UI_PASSWORD"),
-	sessionManager,
-)
-
 	mux := http.NewServeMux()
 	s := &Server{
 		configPath: configPath,
@@ -98,11 +83,9 @@ func NewServer(addr, configPath, exploPath string) *Server {
 		mux:        mux,
 		server: &http.Server{
 			Addr:    addr,
-			Handler: sessionManager.Handle(mux),
+			Handler: mux,
 		},
-		authStore: authStore,
-		sessionManager: sessionManager,
-		manualRun: newManualRunState(),
+		manualRun:      newManualRunState(),
 	}
 
 	s.registerRoutes()
@@ -147,26 +130,22 @@ func (s *Server) registerRoutes() {
 			slog.Error("failed writing to http", "msg", err.Error())
 		}
 	})
-	s.mux.Handle("GET /api/ui/config", s.authStore.RequireAuth(http.HandlerFunc(s.handleGetConfig)))
-	s.mux.Handle("GET /api/ui/config/raw", s.authStore.RequireAuth(http.HandlerFunc(s.handleGetConfigRaw)))
-	s.mux.Handle("POST /api/ui/config", s.authStore.RequireAuth(http.HandlerFunc(s.handleSaveConfig)))
-	s.mux.Handle("POST /api/ui/config/reset", s.authStore.RequireAuth(http.HandlerFunc(s.handleResetConfig)))
-	s.mux.Handle("POST /api/ui/config/schedules", s.authStore.RequireAuth(http.HandlerFunc(s.handleSaveSchedule)))
-	s.mux.Handle("POST /api/ui/wizard/step1", s.authStore.RequireAuth(http.HandlerFunc(s.handleWizardStep1)))
-	s.mux.Handle("POST /api/ui/wizard/step2", s.authStore.RequireAuth(http.HandlerFunc(s.handleWizardStep2)))
-	s.mux.Handle("POST /api/ui/wizard/step3", s.authStore.RequireAuth(http.HandlerFunc(s.handleWizardStep3)))
-	s.mux.Handle("GET /api/ui/browse", s.authStore.RequireAuth(http.HandlerFunc(s.handleBrowse)))
-	s.mux.Handle("POST /api/ui/run", s.authStore.RequireAuth(http.HandlerFunc(s.handleRun)))
-	s.mux.Handle("GET /api/ui/run/events", s.authStore.RequireAuth(http.HandlerFunc(s.handleRunEvents)))
-	s.mux.Handle("POST /api/ui/run/stop", s.authStore.RequireAuth(http.HandlerFunc(s.handleStopRun)))
-	s.mux.Handle("GET /api/ui/run/status", s.authStore.RequireAuth(http.HandlerFunc(s.handleRunStatus)))
-	s.mux.Handle("GET /api/ui/logs", s.authStore.RequireAuth(http.HandlerFunc(s.handleGetLog)))
-	s.mux.Handle("GET /api/ui/playlists", s.authStore.RequireAuth(http.HandlerFunc(s.handleGetPlaylist)))
-	s.mux.Handle("POST /api/ui/playlists/prefetch", s.authStore.RequireAuth(http.HandlerFunc(s.handlePrefetchCovers)))
-	s.mux.Handle("POST /api/ui/logout", s.authStore.RequireAuth(http.HandlerFunc(s.handleLogout)))
-	s.mux.HandleFunc("GET /api/ui/csrf", s.csrfHandler)
-	s.mux.HandleFunc("POST /api/ui/login", s.handleLogin)
-	s.mux.HandleFunc("GET /api/ui/auth/status", s.handleAuthStatus)
+	s.mux.HandleFunc("GET /api/ui/config", s.handleGetConfig)
+	s.mux.HandleFunc("GET /api/ui/config/raw", s.handleGetConfigRaw)
+	s.mux.HandleFunc("POST /api/ui/config", s.handleSaveConfig)
+	s.mux.HandleFunc("POST /api/ui/config/reset", s.handleResetConfig)
+	s.mux.HandleFunc("POST /api/ui/config/schedules", s.handleSaveSchedule)
+	s.mux.HandleFunc("POST /api/ui/wizard/step1", s.handleWizardStep1)
+	s.mux.HandleFunc("POST /api/ui/wizard/step2", s.handleWizardStep2)
+	s.mux.HandleFunc("POST /api/ui/wizard/step3", s.handleWizardStep3)
+	s.mux.HandleFunc("GET /api/ui/browse", s.handleBrowse)
+	s.mux.HandleFunc("POST /api/ui/run", s.handleRun)
+	s.mux.HandleFunc("GET /api/ui/run/events", s.handleRunEvents)
+	s.mux.HandleFunc("POST /api/ui/run/stop", s.handleStopRun)
+	s.mux.HandleFunc("GET /api/ui/run/status", s.handleRunStatus)
+	s.mux.HandleFunc("GET /api/ui/logs", s.handleGetLog)
+	s.mux.HandleFunc("GET /api/ui/playlists", s.handleGetPlaylist)
+	s.mux.HandleFunc("POST /api/ui/playlists/prefetch", s.handlePrefetchCovers)
 	s.mux.HandleFunc("GET /api/ui/background-art", s.handleBackgroundArt)
 	s.mux.HandleFunc("GET /api/ui/setup-status", s.handleSetupStatus)
 
@@ -201,7 +180,7 @@ func (s *Server) openRunLog() (*os.File, error) {
 	return os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 }
 
-// handleSetupStatus returns {"wizard_complete": bool} for first time setups. Public — no auth required.
+// handleSetupStatus returns {"wizard_complete": bool} for first time setups.
 func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	wizardComplete := false
 	if data, err := os.ReadFile(s.configPath); err == nil {
@@ -211,49 +190,6 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]bool{"wizard_complete": wizardComplete}); err != nil {
 		slog.Error("failed encoding setup status", "err", err.Error())
 	}
-}
-
-func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	sess := s.sessionManager.GetSession(r)
-	auth, _ := sess.Get("authenticated").(bool)
-	if !auth {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		err := http.StatusMethodNotAllowed
-		http.Error(w, "Invalid request method", err)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-
-	username := r.FormValue("username")
-	password := r.FormValue("password")
-
-	if !s.authStore.CompareCreds(username, password) {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-		return
-	}
-	sess := s.sessionManager.GetSession(r)
-	sess.Put("authenticated", true)
-	sess.Put("username", username)
-	//s.sessionManager.Migrate(sess)
-	slog.Info("successful login", "user", username)
-}
-
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	sess := s.sessionManager.GetSession(r)
-	sess.Delete("authenticated")
-	sess.Delete("username")
-	w.WriteHeader(http.StatusOK)
 }
 
 // handleGetLog returns the contents of the rolling log file.
@@ -266,20 +202,6 @@ func (s *Server) handleGetLog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if _, err := w.Write(data); err != nil {
 		slog.Error("failed writing http response", "msg", err.Error())
-	}
-}
-
-func (s *Server) csrfHandler(w http.ResponseWriter, r *http.Request) {
-	session := s.sessionManager.GetSession(r)
-
-	token, _ := session.Get("csrf_token").(string)
-
-	w.Header().Set("Content-Type", "application/json")
-
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		"csrf_token": token,
-	}); err != nil {
-		slog.Error("failed encoding token to http", "msg", err.Error())
 	}
 }
 
@@ -569,6 +491,7 @@ func (s *Server) handleWizardStep3(w http.ResponseWriter, r *http.Request) {
 		UseSubdirectory  bool     `json:"use_subdirectory"`
 		MigrateDownloads bool     `json:"migrate_downloads"`
 		DownloadServices []string `json:"download_services"`
+		QobuzQuality     string   `json:"qobuz_quality"`
 		YoutubeAPIKey    string   `json:"youtube_api_key"`
 		TrackExtension   string   `json:"track_extension"`
 		FilterList       string   `json:"filter_list"`
@@ -585,8 +508,9 @@ func (s *Server) handleWizardStep3(w http.ResponseWriter, r *http.Request) {
 	}
 	joined := strings.Join(body.DownloadServices, ",")
 	hasYoutube := strings.Contains(joined, "youtube")
+	hasQobuz := strings.Contains(joined, "qobuz")
 	hasSlskd := strings.Contains(joined, "slskd")
-	if (hasYoutube || (hasSlskd && body.MigrateDownloads)) && body.DownloadDir == "" {
+	if (hasYoutube || hasQobuz || (hasSlskd && body.MigrateDownloads)) && body.DownloadDir == "" {
 		http.Error(w, "download_dir is required", http.StatusBadRequest)
 		return
 	}
@@ -604,6 +528,7 @@ func (s *Server) handleWizardStep3(w http.ResponseWriter, r *http.Request) {
 		"USE_SUBDIRECTORY":  useSubdir,
 		"MIGRATE_DOWNLOADS": migrateDL,
 		"DOWNLOAD_SERVICES": joined,
+		"QOBUZ_QUALITY":     body.QobuzQuality,
 		"YOUTUBE_API_KEY":   body.YoutubeAPIKey,
 		"TRACK_EXTENSION":   body.TrackExtension,
 		"FILTER_LIST":       body.FilterList,

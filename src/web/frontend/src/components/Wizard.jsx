@@ -256,12 +256,12 @@ function Collapse({ open, children }) {
 
 function Step3({ fields, setField, envSources, onBack, onFinish, saving }) {
   const { downloadDir, useSubdirectory, migrateDownloads, dlServices,
-          youtubeApiKey, trackExtension, filterList, slskdUrl, slskdApiKey } = fields
+          youtubeApiKey, trackExtension, filterList, qobuzQuality, slskdUrl, slskdApiKey } = fields
   const isLocked = key => envSources[key] === 'env'
 
   const valid = () => {
     if (!Object.values(dlServices).some(Boolean)) return false
-    if ((dlServices.youtube || (dlServices.slskd && migrateDownloads)) && !downloadDir.trim()) return false
+    if ((dlServices.youtube || dlServices.qobuz || (dlServices.slskd && migrateDownloads)) && !downloadDir.trim()) return false
     if (dlServices.slskd && (!slskdUrl.trim() || !slskdApiKey.trim())) return false
     return true
   }
@@ -270,10 +270,45 @@ function Step3({ fields, setField, envSources, onBack, onFinish, saving }) {
     <div>
       <div className="text-[11px] text-muted uppercase tracking-[1px] mb-7">Step 3 of 3 — Downloader</div>
       <p className="text-[13px] text-muted mb-7 leading-relaxed">
-        Explo downloads tracks using one or both services. Enable what you have access to — if both are enabled, YouTube is tried first.
+        Explo downloads tracks using one or more services. Enable what you have access to — if multiple are enabled, they are tried in the order shown.
       </p>
 
       <div className="flex flex-col gap-6">
+
+        {/* Qobuz section */}
+        <div className="flex flex-col gap-4">
+          <ToggleRow
+            checked={dlServices.qobuz}
+            onChange={v => setField('dlServices', { ...dlServices, qobuz: v })}
+            name="Qobuz"
+            desc="High-quality lossless downloads via the SquidWTF API"
+          />
+          <Collapse open={dlServices.qobuz}>
+            <div className="flex flex-col gap-4 pl-4 border-l border-ui-border ml-1 pb-1">
+              <div className="flex flex-col gap-2">
+                <label className="text-[13px] font-medium text-muted">Audio Quality</label>
+                <select className={inputCls} value={qobuzQuality} onChange={e => setField('qobuzQuality', e.target.value)}
+                  disabled={isLocked('QOBUZ_QUALITY')}>
+                  <option value="27">FLAC 24-bit / 192kHz (High-Res)</option>
+                  <option value="7">FLAC 24-bit / 96kHz</option>
+                  <option value="6">FLAC 16-bit / 44.1kHz (Lossless)</option>
+                  <option value="5">MP3 320kbps</option>
+                </select>
+              </div>
+              <TextField label="Download directory">
+                <DirInput value={downloadDir} onChange={v => setField('downloadDir', v)} disabled={isLocked('DOWNLOAD_DIR')}
+                  placeholder="e.g. /data/music/" />
+              </TextField>
+              <ToggleRow
+                checked={useSubdirectory}
+                onChange={v => setField('useSubdirectory', v)}
+                disabled={isLocked('USE_SUBDIRECTORY')}
+                name="Use playlist subfolders"
+                desc="Create a subfolder per playlist inside the download directory"
+              />
+            </div>
+          </Collapse>
+        </div>
 
         {/* YouTube section */}
         <div className="flex flex-col gap-4">
@@ -301,17 +336,21 @@ function Step3({ fields, setField, envSources, onBack, onFinish, saving }) {
                 <input type="text" className={inputCls} value={filterList} onChange={e => setField('filterList', e.target.value)}
                   placeholder="live,remix,instrumental,extended,clean,acapella" autoComplete="off" spellCheck={false} disabled={isLocked('FILTER_LIST')} />
               </TextField>
-              <TextField label="Download directory">
-                <DirInput value={downloadDir} onChange={v => setField('downloadDir', v)} disabled={isLocked('DOWNLOAD_DIR')}
-                  placeholder="e.g. /data/music/" />
-              </TextField>
-              <ToggleRow
-                checked={useSubdirectory}
-                onChange={v => setField('useSubdirectory', v)}
-                disabled={isLocked('USE_SUBDIRECTORY')}
-                name="Use playlist subfolders"
-                desc="Create a subfolder per playlist inside the download directory"
-              />
+              {!dlServices.qobuz && (
+                <>
+                  <TextField label="Download directory">
+                    <DirInput value={downloadDir} onChange={v => setField('downloadDir', v)} disabled={isLocked('DOWNLOAD_DIR')}
+                      placeholder="e.g. /data/music/" />
+                  </TextField>
+                  <ToggleRow
+                    checked={useSubdirectory}
+                    onChange={v => setField('useSubdirectory', v)}
+                    disabled={isLocked('USE_SUBDIRECTORY')}
+                    name="Use playlist subfolders"
+                    desc="Create a subfolder per playlist inside the download directory"
+                  />
+                </>
+              )}
             </div>
           </Collapse>
         </div>
@@ -345,8 +384,8 @@ function Step3({ fields, setField, envSources, onBack, onFinish, saving }) {
                   desc="Move completed downloads to a separate directory after transfer"
                 />
               </div>
-              {/* Only show download dir here when YouTube isn't also enabled — otherwise it lives in the YouTube section */}
-              <Collapse open={migrateDownloads && !dlServices.youtube}>
+              {/* Only show download dir here when YouTube and Qobuz aren't also enabled — otherwise it lives in their sections */}
+              <Collapse open={migrateDownloads && !dlServices.youtube && !dlServices.qobuz}>
                 <div className="flex flex-col gap-4 pt-4 pb-1">
                   <TextField label="Download directory">
                     <DirInput value={downloadDir} onChange={v => setField('downloadDir', v)} disabled={isLocked('DOWNLOAD_DIR')}
@@ -407,7 +446,8 @@ export default function Wizard({ config, envSources, bgUrl, bgLoaded, onBgLoad, 
       downloadDir:      config.DOWNLOAD_DIR || '',
       useSubdirectory:  config.USE_SUBDIRECTORY !== 'false',
       migrateDownloads: config.MIGRATE_DOWNLOADS === 'true',
-      dlServices:       { youtube: s.includes('youtube'), slskd: s.includes('slskd') },
+      dlServices:       { qobuz: s.includes('qobuz'), youtube: s.includes('youtube'), slskd: s.includes('slskd') },
+      qobuzQuality:     config.QOBUZ_QUALITY || '27',
       youtubeApiKey:    config.YOUTUBE_API_KEY || '',
       trackExtension:   config.TRACK_EXTENSION || '',
       filterList:       config.FILTER_LIST || '',
@@ -462,6 +502,7 @@ export default function Wizard({ config, envSources, bgUrl, bgLoaded, onBgLoad, 
       await wizardStep3({
         download_dir: fields.downloadDir, use_subdirectory: fields.useSubdirectory,
         migrate_downloads: fields.migrateDownloads, download_services: services,
+        qobuz_quality: fields.qobuzQuality,
         youtube_api_key: fields.youtubeApiKey, track_extension: fields.trackExtension,
         filter_list: fields.filterList, slskd_url: fields.slskdUrl, slskd_api_key: fields.slskdApiKey,
       })

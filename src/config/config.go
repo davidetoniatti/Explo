@@ -80,6 +80,7 @@ type DownloadConfig struct {
 	Youtube         Youtube
 	YoutubeMusic    YoutubeMusic
 	Slskd           Slskd
+	Qobuz           Qobuz
 	ExcludeLocal    bool
 	KeepPermissions bool     `env:"KEEP_PERMISSIONS" env-default:"true"` // keep original file permissions when migrating download
 	RenameTrack     bool     `env:"RENAME_TRACK" env-default:"false"`    // Rename track in {title}-{artist} format
@@ -93,6 +94,11 @@ type Filters struct {
 	MinBitDepth int      `env:"MIN_BIT_DEPTH" env-default:"8"`
 	MinBitRate  int      `env:"MIN_BITRATE" env-default:"256"`
 	FilterList  []string `env:"FILTER_LIST" env-default:"live,remix,instrumental,extended,clean,acapella"`
+}
+
+type Qobuz struct {
+	Quality string `env:"QOBUZ_QUALITY" env-default:"27"`
+	Filters Filters
 }
 
 type Youtube struct {

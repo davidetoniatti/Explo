@@ -38,6 +38,8 @@ func NewDownloader(cfg *cfg.DownloadConfig, httpClient *util.HttpClient, filterL
 			slskdClient := NewSlskd(cfg.Slskd, cfg.DownloadDir)
 			slskdClient.AddHeader()
 			downloader = append(downloader, slskdClient)
+		case "qobuz":
+			downloader = append(downloader, NewQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient))
 		default:
 			return nil, fmt.Errorf("downloader '%s' not supported", service)
 		}
