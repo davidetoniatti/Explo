@@ -175,7 +175,18 @@ func (c *Slskd) GetTrack(track *models.Track) error {
 func (c Slskd) searchTrack(track *models.Track) (string, error) {
 	reqParams := "/api/v0/searches"
 
-	payload := fmt.Appendf(nil, `{"searchText": "%s - %s"}`, track.CleanTitle, track.Artist)
+	type SearchRequest struct {
+		SearchText string `json:"searchText"`
+	}
+
+	req := SearchRequest{
+		SearchText: fmt.Sprintf("%s - %s", track.CleanTitle, track.Artist),
+	}
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal slskd search request: %w", err)
+	}
 
 	body, err := c.HttpClient.MakeRequest("POST", c.Cfg.URL+reqParams, bytes.NewReader(payload), c.Headers)
 	if err != nil {

@@ -251,15 +251,29 @@ func (c *Jellyfin) CreatePlaylist(tracks []*models.Track) error {
 
 func (c *Jellyfin) UpdatePlaylist() error {
 	queryParams := fmt.Sprintf("/Items/%s", c.Cfg.PlaylistID)
-	payload := fmt.Appendf(nil, `
-		{
-		"Id":"%s",
-		"Name":"%s",
-		"Overview":"%s",
-		"Genres":[],
-		"Tags":[],
-		"ProviderIds":{}
-		}`, c.Cfg.PlaylistID, c.Cfg.PlaylistName, c.Cfg.PlaylistDescr) // the additional fields have to be added, otherwise JF returns code 400
+
+	type UpdatePlaylistRequest struct {
+		ID          string            `json:"Id"`
+		Name        string            `json:"Name"`
+		Overview    string            `json:"Overview"`
+		Genres      []string          `json:"Genres"`
+		Tags        []string          `json:"Tags"`
+		ProviderIDs map[string]string `json:"ProviderIds"`
+	}
+
+	req := UpdatePlaylistRequest{
+		ID:          c.Cfg.PlaylistID,
+		Name:        c.Cfg.PlaylistName,
+		Overview:    c.Cfg.PlaylistDescr,
+		Genres:      []string{},
+		Tags:        []string{},
+		ProviderIDs: make(map[string]string),
+	}
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Jellyfin playlist update request: %w", err)
+	}
 
 	if _, err := c.HttpClient.MakeRequest("POST", c.Cfg.URL+queryParams, bytes.NewBuffer(payload), c.Cfg.Creds.Headers); err != nil {
 		return err

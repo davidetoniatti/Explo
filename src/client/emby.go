@@ -246,13 +246,24 @@ func (c *Emby) UpdatePlaylist() error {
 	time.Sleep(5 * time.Second) // small buffer between playlist creation and updating, Emby doesn't update playlist otherwise
 	reqParam := fmt.Sprintf("/emby/Items/%s", c.Cfg.PlaylistID)
 
-	payload := fmt.Appendf(nil, `
-		{
-		"Id": "%s",
-		"Name": "%s",
-		"Overview": "%s",
-		"ProviderIds": {}
-		}`, c.Cfg.PlaylistID, c.Cfg.PlaylistName, c.Cfg.PlaylistDescr) // the additional field has to be added, otherwise Emby returns code 500
+	type UpdatePlaylistRequest struct {
+		ID          string            `json:"Id"`
+		Name        string            `json:"Name"`
+		Overview    string            `json:"Overview"`
+		ProviderIDs map[string]string `json:"ProviderIds"`
+	}
+
+	req := UpdatePlaylistRequest{
+		ID:          c.Cfg.PlaylistID,
+		Name:        c.Cfg.PlaylistName,
+		Overview:    c.Cfg.PlaylistDescr,
+		ProviderIDs: make(map[string]string),
+	}
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Emby playlist update request: %w", err)
+	}
 
 	if _, err := c.HttpClient.MakeRequest("POST", c.Cfg.URL+reqParam, bytes.NewBuffer(payload), c.Cfg.Creds.Headers); err != nil {
 		return err
