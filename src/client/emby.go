@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -93,17 +94,36 @@ func (c *Emby) GetLibrary() error {
 func (c *Emby) AddLibrary() error {
 	reqParam := "/emby/Library/VirtualFolders"
 
-	payload := fmt.Appendf(nil, `{
-		"Name": "%s",
-		"CollectionType": "Music",
-		"RefreshLibrary": true,
-		"Paths": "%s"
-		"LibraryOptions": {
-		  "Enabled": true,
-		  "EnableRealtimeMonitor": true,
-		  "EnableLUFSScan": false
-		}
-	  }`, c.Cfg.LibraryName, c.Cfg.DownloadDir)
+	type LibraryOptions struct {
+		Enabled               bool `json:"Enabled"`
+		EnableRealtimeMonitor bool `json:"EnableRealtimeMonitor"`
+		EnableLUFSScan        bool `json:"EnableLUFSScan"`
+	}
+
+	type AddLibraryRequest struct {
+		Name           string         `json:"Name"`
+		CollectionType string         `json:"CollectionType"`
+		RefreshLibrary bool           `json:"RefreshLibrary"`
+		Paths          []string       `json:"Paths"`
+		LibraryOptions LibraryOptions `json:"LibraryOptions"`
+	}
+
+	req := AddLibraryRequest{
+		Name:           c.Cfg.LibraryName,
+		CollectionType: "Music",
+		RefreshLibrary: true,
+		Paths:          []string{c.Cfg.DownloadDir},
+		LibraryOptions: LibraryOptions{
+			Enabled:               true,
+			EnableRealtimeMonitor: true,
+			EnableLUFSScan:        false,
+		},
+	}
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Emby library request: %w", err)
+	}
 
 	if _, err := c.HttpClient.MakeRequest("POST", c.Cfg.URL+reqParam, bytes.NewReader(payload), c.Cfg.Creds.Headers); err != nil {
 		return fmt.Errorf("failed to add library to Emby using the download path, please define a library name using LIBRARY_NAME in .env: %s", err.Error())
