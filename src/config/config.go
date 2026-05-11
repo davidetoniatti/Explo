@@ -173,7 +173,7 @@ func (cfg *Config) ReadEnv() {
 	if err != nil {
 		// If the error is because the file doesn't exist, fallback to env vars
 		if errors.Is(err, os.ErrNotExist) {
-			if err := cleanenv.ReadEnv(&cfg); err != nil {
+			if err := cleanenv.ReadEnv(cfg); err != nil {
 				slog.Error("failed to load config from env vars", "context", err.Error())
 				os.Exit(1)
 			}
