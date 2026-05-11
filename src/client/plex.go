@@ -34,9 +34,10 @@ type Libraries struct {
 		AllowSync bool   `json:"allowSync"`
 		Title1    string `json:"title1"`
 		Library   []struct {
-			Title    string `json:"title"`
-			Key      string `json:"key"`
-			Location []struct {
+			Title      string `json:"title"`
+			Key        string `json:"key"`
+			Refreshing bool   `json:"refreshing"`
+			Location   []struct {
 				ID   int    `json:"id"`
 				Path string `json:"path"`
 			} `json:"Location"`
@@ -222,6 +223,27 @@ func (c *Plex) RefreshLibrary() error {
 }
 
 func (c *Plex) CheckRefreshState() bool {
+	params := "/library/sections/"
+
+	body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+params, nil, c.Cfg.Creds.Headers)
+	if err != nil {
+		slog.Warn("failed to check Plex refresh state", "error", err)
+		return false
+	}
+
+	var libraries Libraries
+	err = util.ParseResp(body, &libraries)
+	if err != nil {
+		slog.Warn("failed to parse Plex libraries for refresh state", "error", err)
+		return false
+	}
+
+	for _, library := range libraries.MediaContainer.Library {
+		if c.Cfg.LibraryName == library.Title {
+			return !library.Refreshing
+		}
+	}
+
 	return false
 }
 
