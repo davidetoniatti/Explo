@@ -192,21 +192,31 @@ func (c *Jellyfin) SearchPlaylist() error {
 }
 
 func (c *Jellyfin) CreatePlaylist(tracks []*models.Track) error {
+	songIDs := make([]string, 0, len(tracks))
+	for _, track := range tracks {
+		if track.Present {
+			songIDs = append(songIDs, track.ID)
+		}
+	}
 
-	songs, err := formatJFSongs(tracks)
+	type CreatePlaylistRequest struct {
+		Name      string   `json:"Name"`
+		IDs       []string `json:"Ids"`
+		MediaType string   `json:"MediaType"`
+	}
+
+	req := CreatePlaylistRequest{
+		Name:      c.Cfg.PlaylistName,
+		IDs:       songIDs,
+		MediaType: "Audio",
+	}
+
+	payload, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("failed to marshal track IDs: %s", err.Error())
+		return fmt.Errorf("failed to marshal Jellyfin playlist request: %w", err)
 	}
 
 	queryParams := "/Playlists"
-	payload := fmt.Appendf(nil, `
-		{
-		"Name": "%s",
-		"Ids": %s,
-		"MediaType": "Audio",
-		"UserId": "%s"
-		}`, c.Cfg.PlaylistName, songs, c.Cfg.Creds.APIKey)
-
 	body, err := c.HttpClient.MakeRequest("POST", c.Cfg.URL+queryParams, bytes.NewReader(payload), c.Cfg.Creds.Headers)
 	if err != nil {
 		return err
