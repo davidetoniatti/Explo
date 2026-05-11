@@ -36,20 +36,35 @@ func (c *MPD) AddLibrary() error {
 }
 
 func (c *MPD) SearchSongs(tracks []*models.Track) error {
+	if c.Cfg.DownloadDir == "" {
+		return nil
+	}
+
+	// Cache files in DownloadDir to avoid walking for each track
+	fileMap := make(map[string]string)
+	err := filepath.WalkDir(c.Cfg.DownloadDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			fileMap[d.Name()] = path
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Warn("failed to walk DownloadDir", "path", c.Cfg.DownloadDir, "error", err)
+	}
+
 	for i := range tracks {
 		if tracks[i].File == "" {
 			continue
 		}
-	
-		if c.Cfg.DownloadDir != "" {
-			fullName := tracks[i].File
-			if fullPath, err := c.findTrack(fullName, c.Cfg.DownloadDir); err == nil {
-				tracks[i].File = fullPath
-				tracks[i].Present = true
-				continue
-			} else {
-				fmt.Printf("Track not found in DownloadDir: %s\n", fullName)
-			}
+
+		if fullPath, ok := fileMap[tracks[i].File]; ok {
+			tracks[i].File = fullPath
+			tracks[i].Present = true
+		} else {
+			slog.Debug("Track not found in DownloadDir", "file", tracks[i].File)
 		}
 	}
 	return nil
@@ -101,24 +116,4 @@ func (c *MPD) DeletePlaylist() error {
 		return nil
 	}
 	return fmt.Errorf("playlist not found")
-}
-
-func (c MPD) findTrack(name, path string) (string, error) {
-	var foundPath string
-    errorFound := errors.New("file found")
-    err := filepath.WalkDir(path, func(currentPath string, d os.DirEntry, err error) error {
-    if err != nil {
-        return err
-    }
-    if d.Name() == name {
-		foundPath = currentPath
-        return errorFound
-    }
-    return nil
-   })
-   if errors.Is(err, errorFound) {
-		return foundPath, nil
-   }
-
-   return "", fmt.Errorf("no file found named %s in %s: %s", name, path, err)
 }
