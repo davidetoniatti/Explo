@@ -131,6 +131,26 @@ func (c *Jellyfin) RefreshLibrary() error {
 }
 
 func (c *Jellyfin) CheckRefreshState() bool {
+	reqParam := "/Library/VirtualFolders"
+
+	body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+reqParam, nil, c.Cfg.Creds.Headers)
+	if err != nil {
+		slog.Warn("failed to check Jellyfin refresh state", "error", err)
+		return false
+	}
+
+	var paths Paths
+	if err = util.ParseResp(body, &paths); err != nil {
+		slog.Warn("failed to parse Jellyfin virtual folders for refresh state", "error", err)
+		return false
+	}
+
+	for _, path := range paths {
+		if path.Name == c.Cfg.LibraryName {
+			return path.RefreshStatus == ""
+		}
+	}
+
 	return false
 }
 

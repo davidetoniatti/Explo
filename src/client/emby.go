@@ -141,6 +141,28 @@ func (c *Emby) RefreshLibrary() error {
 }
 
 func (c *Emby) CheckRefreshState() bool {
+	reqParam := "/emby/Library/VirtualFolders"
+
+	body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+reqParam, nil, c.Cfg.Creds.Headers)
+	if err != nil {
+		slog.Warn("failed to check Emby refresh state", "error", err)
+		return false
+	}
+
+	var paths EmbyPaths
+	if err = util.ParseResp(body, &paths); err != nil {
+		slog.Warn("failed to parse Emby virtual folders for refresh state", "error", err)
+		return false
+	}
+
+	for _, path := range paths {
+		if path.Name == c.Cfg.LibraryName {
+			// RefreshStatus is usually empty when not refreshing, or contains percentage/state
+			// If it's not empty, it's likely still refreshing.
+			return path.RefreshStatus == ""
+		}
+	}
+
 	return false
 }
 
