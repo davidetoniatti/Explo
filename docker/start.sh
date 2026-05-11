@@ -78,8 +78,8 @@ for var in $(env | grep "_SCHEDULE=" | cut -d= -f1); do
   fi
 
   # Default: just run explo if flags are empty
-  # Note: apk upgrade still runs as root (crond is root), but explo runs as the specified user via su-exec
-  cmd="apk add --upgrade yt-dlp && cd /opt/explo && su-exec explo ./explo $flags >> /proc/1/fd/1 2>&1"
+  # Note: explo runs as the specified user via su-exec
+  cmd="cd /opt/explo && su-exec explo ./explo $flags >> /proc/1/fd/1 2>&1"
 
   echo "$schedule $cmd" >> /etc/crontabs/root
   echo "[setup] Registered job: $job"
@@ -93,7 +93,7 @@ echo "[setup] Starting cron..."
 
 if [ "$EXECUTE_ON_START" = "true" ]; then
     echo "[setup] Executing startup task..."  
-    apk add --upgrade yt-dlp && cd /opt/explo && su-exec explo ./explo $START_FLAGS
+    cd /opt/explo && su-exec explo ./explo $START_FLAGS
 fi
 
 crond -f -l 2
