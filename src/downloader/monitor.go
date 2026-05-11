@@ -21,17 +21,17 @@ type MonitorConfig struct {
 	MigrateDownload bool
 	FromDir         string
 	ToDir           string
-	Service			string
+	Service         string
 }
 
 type FileStatus struct {
-	ID               string    `json:"id"`
-	Filename         string    `json:"filename"`
-	Size             int       `json:"size"`
-	State            string    `json:"state"`
-	BytesTransferred int       `json:"bytesTransferred"`
-	BytesRemaining   int       `json:"bytesRemaining"`
-	PercentComplete  float64   `json:"percentComplete"`
+	ID               string  `json:"id"`
+	Filename         string  `json:"filename"`
+	Size             int     `json:"size"`
+	State            string  `json:"state"`
+	BytesTransferred int     `json:"bytesTransferred"`
+	BytesRemaining   int     `json:"bytesRemaining"`
+	PercentComplete  float64 `json:"percentComplete"`
 }
 
 func (c *DownloadClient) MonitorDownloads(tracks []*models.Track, m Monitor) error {
@@ -76,13 +76,13 @@ func (c *DownloadClient) MonitorDownloads(tracks []*models.Track, m Monitor) err
 				tracker.Counter++
 
 				if tracker.Counter >= 2 {
-					slog.Info("[monitor] track not found in queue after retries, skipping", "service", monCfg.Service,"track title", track.CleanTitle, "track artist", track.MainArtist)
+					slog.Info("[monitor] track not found in queue after retries, skipping", "service", monCfg.Service, "track title", track.CleanTitle, "track artist", track.MainArtist)
 					tracker.Skipped = true
 				}
 				continue
 			}
 
-			if fileStatus.BytesRemaining == 0 || fileStatus.PercentComplete == 100 || strings.Contains(fileStatus.State, "Succeeded") {		
+			if fileStatus.BytesRemaining == 0 || fileStatus.PercentComplete == 100 || strings.Contains(fileStatus.State, "Succeeded") {
 				track.Present = true
 				slog.Info("[monitor] file downloaded successfully", "service", monCfg.Service, "file", track.File)
 				var path string
@@ -116,7 +116,7 @@ func (c *DownloadClient) MonitorDownloads(tracks []*models.Track, m Monitor) err
 				continue
 			}
 		}
-			// Exit condition: all tracks have been processed or skipped
+		// Exit condition: all tracks have been processed or skipped
 		if tracksProcessed(tracks, progressMap) {
 			slog.Info("[monitor] Finished", "service", monCfg.Service, "downloaded files", successDownloads, "total tracks", len(tracks))
 			return nil

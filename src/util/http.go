@@ -16,7 +16,7 @@ type HttpClientConfig struct {
 }
 
 type HttpClient struct {
-	Client *http.Client
+	Client    *http.Client
 	UserAgent string
 }
 
@@ -64,6 +64,30 @@ func (c *HttpClient) MakeRequest(method, url string, payload io.Reader, headers 
 	}
 
 	return body, nil
+}
+
+func (c *HttpClient) GetStream(url string, headers map[string]string) (io.ReadCloser, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize request: %s", err.Error())
+	}
+	req.Header.Add("User-Agent", c.UserAgent)
+
+	for key, value := range headers {
+		req.Header.Add(key, value)
+	}
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %s", err.Error())
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("got %d from %s", resp.StatusCode, url)
+	}
+
+	return resp.Body, nil
 }
 
 func ParseResp[T any](body []byte, target *T) error {

@@ -61,23 +61,23 @@ type DownloadStatus []struct {
 	Directories []Directories `json:"directories"`
 }
 type DownloadFiles struct {
-	ID               string          `json:"id"`
-	Username         string          `json:"username"`
-	Direction        string          `json:"direction"`
-	Name             string 		 `json:"filename"`
-	Size             int             `json:"size"`
-	StartOffset      int             `json:"startOffset"`
-	State            string          `json:"state"`
-	RequestedAt      string          `json:"requestedAt"`
-	EnqueuedAt       string          `json:"enqueuedAt"`
-	StartedAt        time.Time       `json:"startedAt"`
-	EndedAt          time.Time       `json:"endedAt"`
-	BytesTransferred int             `json:"bytesTransferred"`
-	AverageSpeed     float64         `json:"averageSpeed"`
-	BytesRemaining   int             `json:"bytesRemaining"`
-	ElapsedTime      string          `json:"elapsedTime"`
-	PercentComplete  float64         `json:"percentComplete"`
-	RemainingTime    string          `json:"remainingTime"`
+	ID               string    `json:"id"`
+	Username         string    `json:"username"`
+	Direction        string    `json:"direction"`
+	Name             string    `json:"filename"`
+	Size             int       `json:"size"`
+	StartOffset      int       `json:"startOffset"`
+	State            string    `json:"state"`
+	RequestedAt      string    `json:"requestedAt"`
+	EnqueuedAt       string    `json:"enqueuedAt"`
+	StartedAt        time.Time `json:"startedAt"`
+	EndedAt          time.Time `json:"endedAt"`
+	BytesTransferred int       `json:"bytesTransferred"`
+	AverageSpeed     float64   `json:"averageSpeed"`
+	BytesRemaining   int       `json:"bytesRemaining"`
+	ElapsedTime      string    `json:"elapsedTime"`
+	PercentComplete  float64   `json:"percentComplete"`
+	RemainingTime    string    `json:"remainingTime"`
 }
 type Directories struct {
 	Directory string          `json:"directory"`
@@ -115,13 +115,13 @@ func (c *Slskd) AddHeader() {
 }
 
 func (c *Slskd) GetConf() (MonitorConfig, error) {
-	return  MonitorConfig{
-		CheckInterval: c.Cfg.MonitorConfig.Interval,
+	return MonitorConfig{
+		CheckInterval:   c.Cfg.MonitorConfig.Interval,
 		MonitorDuration: c.Cfg.MonitorConfig.Duration,
 		MigrateDownload: c.Cfg.MigrateDL,
-		ToDir: c.DownloadDir,
-		FromDir: c.Cfg.SlskdDir,
-		Service: "slskd",
+		ToDir:           c.DownloadDir,
+		FromDir:         c.Cfg.SlskdDir,
+		Service:         "slskd",
 	}, nil
 }
 
@@ -342,7 +342,6 @@ func (c Slskd) queueDownload(files []File, track *models.Track) error {
 	return fmt.Errorf("couldn't download track: %s - %s", track.CleanTitle, track.Artist)
 }
 
-
 func (c *Slskd) GetDownloadStatus(tracks []*models.Track) (map[string]FileStatus, error) {
 	reqParams := "/api/v0/transfers/downloads"
 	fileStatuses := make(map[string]FileStatus, len(tracks))
@@ -365,12 +364,12 @@ func (c *Slskd) GetDownloadStatus(tracks []*models.Track) (map[string]FileStatus
 				for _, file := range dir.Files {
 					if string(file.Name) == track.File {
 						fileStatuses[track.File] = FileStatus{
-							ID: file.ID,
-							Size: file.Size,
-							State: file.State,
+							ID:               file.ID,
+							Size:             file.Size,
+							State:            file.State,
 							BytesTransferred: file.BytesTransferred,
-							BytesRemaining: file.BytesRemaining,
-							PercentComplete: file.PercentComplete,
+							BytesRemaining:   file.BytesRemaining,
+							PercentComplete:  file.PercentComplete,
 						}
 					}
 				}
