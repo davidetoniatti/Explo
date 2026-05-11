@@ -1,4 +1,29 @@
 #!/bin/sh
+
+# Set UID/GID from environment or defaults
+PUID=${PUID:-1000}
+PGID=${PGID:-1000}
+
+echo "[setup] Adjusting permissions for UID $PUID and GID $PGID..."
+
+# Create group if it doesn't exist
+if ! getent group explo >/dev/null; then
+    groupadd -g "$PGID" explo
+fi
+
+# Create user if it doesn't exist
+if ! getent passwd explo >/dev/null; then
+    useradd -u "$PUID" -g "$PGID" -d /opt/explo -s /bin/sh explo
+fi
+
+# Ensure /opt/explo and its contents are owned by the user
+chown -R explo:explo /opt/explo
+
+# Try to chown the data directory if it's mounted
+if [ -d "/data" ]; then
+    chown explo:explo /data
+fi
+
 echo "[setup] Starting web UI..."
 # If user incorectly mounts the config path as a directory, we'll try to automatically append it to .env inside it instead of failing.
 WEB_CFG_PATH="${WEB_CFG_PATH:-/opt/explo/.env}"
@@ -6,7 +31,9 @@ if [ -d "$WEB_CFG_PATH" ]; then
     WEB_CFG_PATH="$WEB_CFG_PATH/.env"
     echo "[setup] Config path is a directory, using $WEB_CFG_PATH"
 fi
-WEB_UI=true WEB_CFG_PATH="$WEB_CFG_PATH" WEB_ADDR="${WEB_ADDR:-:7288}" /opt/explo/explo &
+
+# Run web UI as the explo user
+WEB_UI=true WEB_CFG_PATH="$WEB_CFG_PATH" WEB_ADDR="${WEB_ADDR:-:7288}" su-exec explo /opt/explo/explo &
 echo "[setup] Web UI available at http://localhost:${WEB_ADDR##*:}"
 
 echo "[setup] Initializing cron jobs..."
@@ -28,13 +55,14 @@ if [ -f "$_cfg" ]; then
   done < "$_cfg"
 fi
 
+# Clear existing crontab
+> /etc/crontabs/root
 
 # $CRON_SHCEDULE was deprecated in v0.11.0, keeping this block for backwards compatibility
 if [ -n "$CRON_SCHEDULE" ]; then
-    echo "$CRON_SCHEDULE apk add --upgrade yt-dlp && cd /opt/explo && ./explo >> /proc/1/fd/1 2>&1" > /etc/crontabs/root
+    echo "$CRON_SCHEDULE apk add --upgrade yt-dlp && cd /opt/explo && su-exec explo ./explo >> /proc/1/fd/1 2>&1" > /etc/crontabs/root
     chmod 600 /etc/crontabs/root
     echo "[setup] Registered single CRON_SCHEDULE job: $CRON_SCHEDULE"
-    crond -f -l 2
 fi
 
 # Loop over all *_SCHEDULE environment variables
@@ -50,7 +78,8 @@ for var in $(env | grep "_SCHEDULE=" | cut -d= -f1); do
   fi
 
   # Default: just run explo if flags are empty
-  cmd="apk add --upgrade yt-dlp && cd /opt/explo && ./explo $flags >> /proc/1/fd/1 2>&1"
+  # Note: apk upgrade still runs as root (crond is root), but explo runs as the specified user via su-exec
+  cmd="apk add --upgrade yt-dlp && cd /opt/explo && su-exec explo ./explo $flags >> /proc/1/fd/1 2>&1"
 
   echo "$schedule $cmd" >> /etc/crontabs/root
   echo "[setup] Registered job: $job"
@@ -64,7 +93,7 @@ echo "[setup] Starting cron..."
 
 if [ "$EXECUTE_ON_START" = "true" ]; then
     echo "[setup] Executing startup task..."  
-    apk add --upgrade yt-dlp && cd /opt/explo && ./explo $START_FLAGS
-    
+    apk add --upgrade yt-dlp && cd /opt/explo && su-exec explo ./explo $START_FLAGS
 fi
+
 crond -f -l 2
