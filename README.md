@@ -16,9 +16,8 @@ Explo uses the [ListenBrainz](https://listenbrainz.org/) recommendation engine t
   - Weekly Exploration
   - Weekly Jams
   - Daily Jams
-- Request tracks from YouTube, Soulseek, or both
-- Add metadata (title, artist, album) to YouTube downloads
-- Create playlists in your music system
+  - Request tracks from YouTube, Soulseek, Qobuz, or a combination of them
+  - Add metadata (title, artist, album) to YouTube downloads- Create playlists in your music system
 - Keep previous playlists for later listening
 ---
 
