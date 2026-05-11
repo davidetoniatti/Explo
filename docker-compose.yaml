@@ -17,6 +17,8 @@ services:
       # - /path/to/cookies.txt:/opt/explo/cookies.txt # Path to optional cookies file (for yt-dlp)
     environment:
       - TZ=UTC # Change this to the timezone set in ListenBrainz (default is UTC)
+      - PUID=1000 # Optional: User ID for file permissions
+      - PGID=1000 # Optional: Group ID for file permissions
 
       # [Legacy] Schedules are managed through the web UI.
       # These can still be set here for backwards compatibility — they will take precedence over the UI.
