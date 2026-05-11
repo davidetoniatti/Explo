@@ -543,6 +543,22 @@ func (s *Server) handleWizardStep3(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) isPathAllowed(path string) bool {
+	// Allow browsing within home directory and /data
+	home, err := os.UserHomeDir()
+	if err == nil && strings.HasPrefix(path, home) {
+		return true
+	}
+	if strings.HasPrefix(path, "/data") {
+		return true
+	}
+	// Also allow /opt/explo if it's the app dir
+	if strings.HasPrefix(path, "/opt/explo") {
+		return true
+	}
+	return false
+}
+
 // handleBrowse returns subdirectories of the requested path for filesystem autocomplete.
 func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Query().Get("path"))
@@ -551,6 +567,11 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 	if !filepath.IsAbs(path) {
 		http.Error(w, "path must be absolute", http.StatusBadRequest)
+		return
+	}
+
+	if !s.isPathAllowed(path) {
+		http.Error(w, "access to this path is restricted", http.StatusForbidden)
 		return
 	}
 
