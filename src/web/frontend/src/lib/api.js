@@ -1,52 +1,11 @@
-let csrfToken = null
-
-async function ensureCSRF() {
-  if (csrfToken) return csrfToken
-
-  const res = await fetch('/api/ui/csrf')
-  const data = await res.json()
-  csrfToken = data.csrf_token
-  return csrfToken
-}
-
 async function apiFetch(url, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
-
   const headers = new Headers(options.headers || {})
 
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const token = await ensureCSRF()
-    headers.set('X-CSRF-Token', token)
-  }
-
   return fetch(url, {
-    credentials: 'include',
     ...options,
     headers,
   })
-}
-
-export async function checkAuth() {
-  const res = await fetch('/api/ui/auth/status', { credentials: 'include' })
-  return res.ok
-}
-
-export async function login(username, password) {
-  const form = new URLSearchParams()
-  form.append('username', username)
-  form.append('password', password)
-
-  const res = await apiFetch('/api/ui/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: form.toString(),
-  })
-
-  if (!res.ok) {
-    throw new Error(await res.text())
-  }
 }
 
 export async function fetchConfig() {
@@ -147,10 +106,6 @@ export async function prefetchPlaylists(user, playlists, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user, playlists, ...options }),
   })
-}
-
-export async function logout() {
-  await apiFetch('/api/ui/logout', { method: 'POST' })
 }
 
 export async function fetchSetupStatus() {

@@ -39,7 +39,7 @@ function useSSE({ onLine, onDone }) {
     const controller = new AbortController()
     abortRef.current = controller
     try {
-      const res = await fetch('/api/ui/run/events', { credentials: 'include', signal: controller.signal })
+      const res = await fetch('/api/ui/run/events', { signal: controller.signal })
       if (!res.ok) { onDone(null); return }
       const reader = res.body.getReader()
       const dec = new TextDecoder()
@@ -488,7 +488,7 @@ function LogsSection() {
 // Module-level cache so the picked cover survives component remounts.
 let _bgCoverCache = null
 
-export default function Settings({ onWizard, onLogout }) {
+export default function Settings({ onWizard }) {
   const [activeTab, setActiveTab] = useState('run')
   const [bgCover, setBgCover] = useState(_bgCoverCache)
 
@@ -542,12 +542,6 @@ export default function Settings({ onWizard, onLogout }) {
               <button className={tabBtnCls(activeTab === 'config')} onClick={() => setActiveTab('config')}>Settings</button>
               <button className={tabBtnCls(activeTab === 'logs')} onClick={() => setActiveTab('logs')}>Logs</button>
             </nav>
-            <button
-              onClick={onLogout}
-              className="pb-2 text-[12px] text-muted hover:text-white transition-colors cursor-pointer bg-transparent border-none"
-            >
-              Sign out
-            </button>
           </header>
 
           {activeTab === 'run' && <HomeSection />}

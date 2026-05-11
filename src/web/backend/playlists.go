@@ -350,7 +350,7 @@ type sitewideReleasesResp struct {
 	} `json:"payload"`
 }
 
-// handleBackgroundArt returns a single cover art URL for use as a login page backdrop.
+// handleBackgroundArt returns a single cover art URL for use as an ambient backdrop.
 // It picks a random local cover if any exist; otherwise it fetches the top global
 // albums from ListenBrainz and downloads cover art for the first available one.
 func (s *Server) handleBackgroundArt(w http.ResponseWriter, r *http.Request) {

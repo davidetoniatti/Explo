@@ -5,9 +5,7 @@ export async function fetchPlaylistTracks(playlistType, options = {}) {
   const key = playlistType
   if (!options.force && memCache.has(key)) return memCache.get(key)
 
-  const res = await fetch(`/api/ui/playlists?type=${encodeURIComponent(playlistType)}`, {
-    credentials: 'include',
-  })
+  const res = await fetch(`/api/ui/playlists?type=${encodeURIComponent(playlistType)}`)
   if (res.status === 404) {
     const result = { tracks: [], generatedAt: null }
     memCache.set(key, result)
