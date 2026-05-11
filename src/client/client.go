@@ -13,7 +13,7 @@ import (
 // Client manages interactions with the selected music system
 type Client struct {
 	System string
-	Cfg    *config.ClientConfig
+	Cfg    config.ClientConfig
 	API    APIClient
 }
 
@@ -35,7 +35,7 @@ type APIClient interface {
 func NewClient(cfg *config.Config) (*Client, error) {
 	c := &Client{
 		System: cfg.System,
-		Cfg:    &cfg.ClientCfg,
+		Cfg:    cfg.ClientCfg,
 	}
 	// Create http client with timeout
 	httpClient := util.NewHttp(util.HttpClientConfig{
