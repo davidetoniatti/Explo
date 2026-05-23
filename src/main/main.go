@@ -2,8 +2,6 @@ package main
 
 import (
 	"explo/src/logging"
-	"explo/src/models"
-	"explo/src/web/backend"
 	"log"
 	"log/slog"
 	"os"
@@ -36,23 +34,6 @@ func setup(cfg *config.Config) {
 }
 
 func main() {
-	if os.Getenv("WEB_UI") == "true" {
-		cfgPath := os.Getenv("WEB_CFG_PATH")
-		if cfgPath == "" {
-			cfgPath = ".env"
-		}
-		exploPath, err := os.Executable()
-		if err != nil {
-			log.Fatal("could not determine executable path: ", err)
-		}
-		addr := os.Getenv("WEB_ADDR")
-		if addr == "" {
-			addr = ":7288"
-		}
-		srv := backend.NewServer(addr, cfgPath, exploPath)
-		log.Fatal(srv.Start())
-	}
-
 	var cfg config.Config
 	if err := cfg.GetFlags(); err != nil {
 		log.Fatal(err)
@@ -69,7 +50,6 @@ func main() {
 		slog.Error(err.Error(), "notify", true)
 		os.Exit(1)
 	}
-	allTracks := append([]*models.Track(nil), tracks...)
 
 	client, err := client.NewClient(&cfg)
 	if err != nil {
@@ -103,12 +83,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	added := make(map[string]bool)
-	for _, t := range tracks {
-		added[t.CleanTitle+"|"+t.Artist] = true
-	}
-	backend.WritePlaylistCache(cfg.Flags.CfgPath, cfg.Flags.Playlist, allTracks, added)
 
 	if err := client.CreatePlaylist(tracks); err != nil {
 		slog.Warn(err.Error())
