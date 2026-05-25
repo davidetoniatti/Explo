@@ -97,8 +97,10 @@ type Filters struct {
 }
 
 type Qobuz struct {
-	Quality string `env:"QOBUZ_QUALITY" env-default:"27"`
-	Filters Filters
+	Quality       string `env:"QOBUZ_QUALITY" env-default:"27"`
+	UserAuthToken string `env:"QOBUZ_USER_AUTH_TOKEN"`
+	UserId        string `env:"QOBUZ_USER_ID"`
+	Filters       Filters
 }
 
 type Youtube struct {
@@ -235,16 +237,14 @@ func (cfg *Config) HandleDeprecation() { //
 
 func (cfg *Config) GenPlaylistName() { // Generate playlist name and description
 
-	cfg.ClientCfg.PlaylistName = getPlaylistName(cfg.Flags.Playlist, cfg.ClientCfg.PlaylistNFormat, cfg.Persist)
-	cfg.ClientCfg.PlaylistDescr = fmt.Sprintf(
-		"Created for %s by Explo, using ListenBrainz recommendations.",
-		cfg.DiscoveryCfg.Listenbrainz.User)
+	folderName := getPlaylistName(cfg.Flags.Playlist, cfg.ClientCfg.PlaylistNFormat, cfg.Persist)
+	cfg.ClientCfg.PlaylistName = strings.ReplaceAll(folderName, "-", " ")
 
 	if cfg.DownloadCfg.UseSubDir {
 		// add playlist name to downloadDir so all songs get downloaded to a single sub directory.
 		cfg.DownloadCfg.DownloadDir = filepath.Join(
 			cfg.DownloadCfg.DownloadDir,
-			cfg.ClientCfg.PlaylistName)
+			folderName)
 	}
 }
 

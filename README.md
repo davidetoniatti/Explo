@@ -1,10 +1,8 @@
 # Explo - Music Discovery for Self-Hosted Music Systems
 
-
 [![Discord](https://img.shields.io/discord/1497141529696014409?style=flat&logo=Discord&labelColor=white&color=black&link=https%3A%2F%2Fdiscord.gg%2FuFWWPaN2zk)](https://discord.gg/uFWWPaN2zk)
 
-
-**Explo** bridges the gap between music discovery and self-hosted music systems. Its main function is to act as a self-hosted alternative to Spotify’s *Discover Weekly*, automating music discovery based on your listening history.
+**Explo** bridges the gap between music discovery and self-hosted music systems. Its main function is to act as a self-hosted alternative to Spotify’s _Discover Weekly_, automating music discovery based on your listening history.
 
 Explo uses the [ListenBrainz](https://listenbrainz.org/) recommendation engine to retrieve personalized tracks and requests them directly into your music library.
 
@@ -29,11 +27,10 @@ See the [Wiki Home](https://github.com/LumePart/Explo/wiki) for an overview of s
 
 Or jump directly to:
 
-- [Getting Started](https://github.com/LumePart/Explo/wiki/2.-Getting-Started) – Installation and setup guide  
-- [Configuration Parameters](https://github.com/LumePart/Explo/wiki/3.-Configuration-Parameters) – Environment variable and flag reference  
-- [System Notes](https://github.com/LumePart/Explo/wiki/4.-System-Notes) – Known issues and system-specific tips  
+- [Getting Started](https://github.com/LumePart/Explo/wiki/2.-Getting-Started) – Installation and setup guide
+- [Configuration Parameters](https://github.com/LumePart/Explo/wiki/3.-Configuration-Parameters) – Environment variable and flag reference
+- [System Notes](https://github.com/LumePart/Explo/wiki/4.-System-Notes) – Known issues and system-specific tips
 - [FAQ](https://github.com/LumePart/Explo/wiki/6.-FAQ) – Common questions
-
 
 ## Acknowledgements
 

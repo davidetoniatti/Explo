@@ -32,3 +32,28 @@ func TestConfig_ReadEnv(t *testing.T) {
 		t.Errorf("expected APIKey to be 'test-api-key', got '%s'", cfg.ClientCfg.Creds.APIKey)
 	}
 }
+
+func TestConfig_GenPlaylistName(t *testing.T) {
+	cfg := &Config{}
+	cfg.Flags.Playlist = "weekly-exploration"
+	cfg.ClientCfg.PlaylistNFormat = "week"
+	cfg.Persist = false
+	cfg.DiscoveryCfg.Listenbrainz.User = "testuser"
+	cfg.DownloadCfg.UseSubDir = true
+	cfg.DownloadCfg.DownloadDir = "/tmp/explo"
+
+	cfg.GenPlaylistName()
+
+	// Since persist is false, folderName should be "Weekly-Exploration"
+	// and PlaylistName should be "Weekly Exploration"
+	expectedPlaylistName := "Weekly Exploration"
+	expectedDownloadDir := "/tmp/explo/Weekly-Exploration"
+
+	if cfg.ClientCfg.PlaylistName != expectedPlaylistName {
+		t.Errorf("expected PlaylistName to be '%s', got '%s'", expectedPlaylistName, cfg.ClientCfg.PlaylistName)
+	}
+
+	if cfg.DownloadCfg.DownloadDir != expectedDownloadDir {
+		t.Errorf("expected DownloadDir to be '%s', got '%s'", expectedDownloadDir, cfg.DownloadCfg.DownloadDir)
+	}
+}

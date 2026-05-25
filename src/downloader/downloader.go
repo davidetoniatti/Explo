@@ -38,6 +38,8 @@ func NewDownloader(cfg *cfg.DownloadConfig, httpClient *util.HttpClient, filterL
 			slskdClient := NewSlskd(cfg.Slskd, cfg.DownloadDir)
 			slskdClient.AddHeader()
 			downloader = append(downloader, slskdClient)
+		case "squidwtf-qobuz":
+			downloader = append(downloader, NewSquidWTFQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient))
 		case "qobuz":
 			downloader = append(downloader, NewQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient))
 		default:
@@ -99,7 +101,7 @@ func (c *DownloadClient) StartDownload(tracks *[]*models.Track) {
 
 func (c *DownloadClient) needsDownloadDir() bool {
 	for _, svc := range c.Cfg.Services {
-		if svc == "youtube" || svc == "youtube-music" {
+		if svc == "youtube" || svc == "youtube-music" || svc == "qobuz" || svc == "squidwtf-qobuz" {
 			return true
 		}
 	}
