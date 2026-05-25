@@ -1,11 +1,11 @@
-# Explo - Music Discovery CLI
+# Explo - Music Discovery for Self-Hosted Music Systems
 
 **Explo** bridges the gap between automated music discovery and self-hosted libraries. It fetches personalized recommendations from ListenBrainz and places the tracks directly into your private media library.
 
 This repository is a fork of the original [LumePart/Explo](https://github.com/LumePart/Explo).
 
 ### Key Differences
-- **Web UI Stripped Out**: We have removed the web user interface, React frontend dependencies, and HTTP server backend to focus purely on the original command-line interface (CLI) execution.
+- **Web UI Stripped**: Removed the web interface, React frontend, and backend server to focus purely on CLI execution.
 - **Enhanced Download Services**: Added direct, native Qobuz downloads (`qobuz`) and proxy captcha Qobuz downloads (`squidwtf-qobuz`).
 
 ---
