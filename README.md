@@ -1,34 +1,25 @@
-# Explo - Music Discovery CLI for Self-Hosted Libraries
+# Explo - Music Discovery CLI
 
-**Explo** is a self-hosted, lightweight Go-based command-line utility designed to bridge the gap between automated music discovery and personal media libraries. 
+**Explo** bridges the gap between automated music discovery and self-hosted libraries. It fetches personalized recommendations from ListenBrainz and places the tracks directly into your private media library.
 
-This project is a CLI-focused fork of the original [LumePart/Explo](https://github.com/LumePart/Explo) repository. While the original project provides a web UI, this version is streamlined to run strictly as a pure CLI application, suited for automated execution via system cron daemons (`crond`), terminal scripts, or headless Docker containers.
+This repository is a fork of the original [LumePart/Explo](https://github.com/LumePart/Explo).
 
-Its primary function is to act as a self-hosted alternative to Spotify’s *Discover Weekly* or *Daily Mixes*, pulling personalized recommendations based on your listening habits and placing the tracks directly into your private media library.
+### Key Differences
+- **Web UI Stripped Out**: We have removed the web user interface, React frontend dependencies, and HTTP server backend to focus purely on the original command-line interface (CLI) execution.
+- **Enhanced Download Services**: Added direct, native Qobuz downloads (`qobuz`) and proxy captcha Qobuz downloads (`squidwtf-qobuz`).
 
 ---
 
 ## Features
 
-- **Personalized ListenBrainz Discovery**: Dynamically retrieves your custom ListenBrainz lists (controlled by runtime flags):
-  - `weekly-exploration` (Weekly Exploration recommendations)
-  - `weekly-jams` (Weekly Jams)
-  - `daily-jams` (Daily Jams)
-- **Multi-Downloader Integration Support**:
-  - **YouTube Music**: Queries YouTube Music via a Python helper script running `ytmusicapi` and downloads audio via `yt-dlp`.
-  - **Soulseek**: Integrates with [Slskd](https://github.com/slskd/slskd) for high-quality peer-to-peer audio retrieval.
-  - **Qobuz Direct**: Direct, native Go integration scraping the Qobuz web player bundle to dynamically fetch signing keys and stream high-quality FLAC or MP3 files (supporting quality fallbacks up to 24-bit/192kHz).
-  - **SquidWTF Qobuz**: Proxy-based Qobuz downloader using a captcha-solving endpoint.
-- **Automated Tagging**: Uses `ffmpeg` to write precise audio metadata (artist, title, album name) to YouTube downloads without losing quality.
-- **Media System Syncing**: Automatically creates, updates, and structures playlists inside self-hosted servers:
-  - **Plex**
-  - **Jellyfin**
-  - **Emby**
-  - **Subsonic** (Navidrome, etc.)
-  - **MPD** (writes native `.m3u` files)
-- **Dynamic Scheduling**: Scans active schedules at startup and updates the system crontab in container environments.
-
----
+- **Personalized ListenBrainz Discovery**: Fetches custom recommendation lists: `weekly-exploration`, `weekly-jams`, or `daily-jams`.
+- **Integrated Download Services**: Prioritized track downloading from:
+  - `youtube` (YouTube Music via `yt-dlp` and `ytmusicapi`)
+  - `slskd` (Soulseek client integration)
+  - `qobuz` (Direct native Qobuz API client using user token)
+  - `squidwtf-qobuz` (Proxy-based captcha-solving downloader)
+- **Tagging**: Uses `ffmpeg` to write title, artist, and album tags.
+- **Media Server Sync**: Automated playlist updates on Plex, Jellyfin, Emby, Subsonic, or MPD.
 
 ## Getting Started
 
