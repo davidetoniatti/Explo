@@ -112,7 +112,9 @@ func (s *CaptchaSolver) SolveAndVerify(baseUrl string) (string, error) {
 	// Create payload: {"challenge": <original_challenge_json>, "solution": <solution_json>}
 	// The C# code does some manual string manipulation to combine them
 	var challengeRaw map[string]interface{}
-	json.Unmarshal(challengeBody, &challengeRaw)
+	if err := json.Unmarshal(challengeBody, &challengeRaw); err != nil {
+		return "", fmt.Errorf("failed to unmarshal challenge for payload: %w", err)
+	}
 
 	payload := map[string]interface{}{
 		"challenge": challengeRaw,

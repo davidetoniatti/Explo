@@ -5,19 +5,19 @@ import (
 	"log/slog"
 	"time"
 )
+
 // slog handler that checks whether to send notifications
 
 type notifyHandler struct {
-	handler   slog.Handler
-	notify *NotificationClient
+	handler slog.Handler
+	notify  *NotificationClient
 }
 
 type Notification struct {
-	Time time.Time `json:"time"`
-	Level string `json:"level"`
-	Message string `json:"message"`
-	Attrs map[string]any `json:"attributes"`
-
+	Time    time.Time      `json:"time"`
+	Level   string         `json:"level"`
+	Message string         `json:"message"`
+	Attrs   map[string]any `json:"attributes"`
 }
 
 func (h *notifyHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -26,7 +26,7 @@ func (h *notifyHandler) Enabled(ctx context.Context, level slog.Level) bool {
 
 func (h *notifyHandler) Handle(ctx context.Context, r slog.Record) error {
 	if shouldNotify(r) {
-		// send notification in another goroutine
+		// sent synchronously so the process doesn't exit before delivery completes
 		notifyStruct := recordToStruct(r)
 		h.notify.SendNotification(notifyStruct)
 	}
@@ -35,15 +35,15 @@ func (h *notifyHandler) Handle(ctx context.Context, r slog.Record) error {
 
 func (h *notifyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &notifyHandler{
-		handler:   h.handler.WithAttrs(attrs),
-		notify: h.notify,
+		handler: h.handler.WithAttrs(attrs),
+		notify:  h.notify,
 	}
 }
 
 func (h *notifyHandler) WithGroup(name string) slog.Handler {
 	return &notifyHandler{
-		handler:   h.handler.WithGroup(name),
-		notify: h.notify,
+		handler: h.handler.WithGroup(name),
+		notify:  h.notify,
 	}
 }
 
@@ -73,7 +73,7 @@ func recordToStruct(r slog.Record) Notification {
 	})
 
 	return Notification{
-		Time: r.Time,
+		Time:    r.Time,
 		Level:   r.Level.String(),
 		Message: r.Message,
 		Attrs:   attrs,

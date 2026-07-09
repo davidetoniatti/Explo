@@ -208,17 +208,12 @@ func (c *ListenBrainz) getTopRecordings(user string) ([]*models.Track, error) {
 
 	tracks := make([]*models.Track, 0, len(resp.Payload.Recordings))
 	for _, rec := range resp.Payload.Recordings {
-		var coverURL string
-		if rec.ReleaseMbid != "" {
-			coverURL = fmt.Sprintf("https://coverartarchive.org/release/%s/front-250", rec.ReleaseMbid)
-		}
 		tracks = append(tracks, &models.Track{
 			Title:      rec.TrackName,
 			CleanTitle: rec.TrackName,
 			Artist:     rec.ArtistName,
 			MainArtist: rec.ArtistName,
 			Album:      rec.ReleaseName,
-			CoverURL:   coverURL,
 		})
 	}
 
@@ -369,12 +364,6 @@ func (c *ListenBrainz) parsePlaylist(identifier string, singleArtist bool) ([]*m
 		trackMeta := track.Extension.HTTPSJspfTrack.AdditionalMetadata
 		trackArtists := trackMeta.Artists
 
-		var coverURL string
-		if trackMeta.CaaReleaseMbid != "" && trackMeta.CaaID != 0 {
-			coverURL = fmt.Sprintf("https://coverartarchive.org/release/%s/%d-250.jpg",
-				trackMeta.CaaReleaseMbid, trackMeta.CaaID)
-		}
-
 		if len(trackMeta.Artists) > 1 {
 			mainArtist = trackMeta.Artists[0].ArtistCreditName
 			if singleArtist {
@@ -399,7 +388,6 @@ func (c *ListenBrainz) parsePlaylist(identifier string, singleArtist bool) ([]*m
 			CleanTitle: track.Title,
 			Title:      title,
 			Duration:   track.Duration,
-			CoverURL:   coverURL,
 		})
 	}
 

@@ -18,7 +18,6 @@ import (
 
 // TODO: reuse notifier instead of creating a new one every time. right now it's fine cause Explo sends 1 message per run
 
-
 type NotificationClient struct {
 	Cfg config.NotifyConfig
 }
@@ -33,22 +32,24 @@ func sendMatrix(cfg config.MatrixNotif, msg string) error {
 	// UserID and RoomID need to be cast as specific types
 	srvc, err := matrix.New(id.UserID(cfg.UserID), id.RoomID(cfg.RoomID), cfg.HomeServer, cfg.AccessToken)
 	if err != nil {
-    return fmt.Errorf("failed to create new Matrix notification service: %s", err.Error())
-  }
+		return fmt.Errorf("failed to create new Matrix notification service: %s", err.Error())
+	}
 
-  notifier := notify.New()
-  notifier.UseServices(srvc)
+	notifier := notify.New()
+	notifier.UseServices(srvc)
 
-  err = notifier.Send(context.Background(), "Explo", msg)
-  if err != nil {
-    return err
-  }
+	err = notifier.Send(context.Background(), "Explo", msg)
+	if err != nil {
+		return err
+	}
 
-  return nil
+	return nil
 }
 
-/* discordgo module (which notify uses) doesn't handle errors correctly
- no errors are given even when authentication fails*/
+/*
+discordgo module (which notify uses) doesn't handle errors correctly
+no errors are given even when authentication fails
+*/
 func sendDiscord(cfg config.DiscordNotif, msg string) error {
 	srvc := discord.New()
 	if err := srvc.AuthenticateWithBotToken(cfg.BotToken); err != nil {
@@ -64,13 +65,12 @@ func sendDiscord(cfg config.DiscordNotif, msg string) error {
 		return fmt.Errorf("failed to send Discord notification: %s", err.Error())
 	}
 
-	return nil	
+	return nil
 }
 
 func sendHttp(cfg config.HttpNotif, msg string) error {
 	httpNotify := nhttp.New()
 	webhooks := getNotifWebhooks(cfg.ReceiverURLs)
-	httpNotify.AddReceiversURLs()
 	httpNotify.AddReceivers(webhooks...)
 	notifier := notify.NewWithServices(httpNotify)
 
@@ -80,21 +80,20 @@ func sendHttp(cfg config.HttpNotif, msg string) error {
 	return nil
 }
 
-func getNotifWebhooks(urls []string) []*nhttp.Webhook{
+func getNotifWebhooks(urls []string) []*nhttp.Webhook {
 	var webhooks []*nhttp.Webhook
 
 	for _, url := range urls {
 
 		webhooks = append(webhooks, &nhttp.Webhook{
 			ContentType: "application/json",
-			Header: http.Header{},
-			URL: url,
-			Method: http.MethodPost,
+			Header:      http.Header{},
+			URL:         url,
+			Method:      http.MethodPost,
 			BuildPayload: func(subject, message string) (payload any) {
 				payl := json.RawMessage(message)
 				return payl
 			},
-
 		})
 	}
 	return webhooks

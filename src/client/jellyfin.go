@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
-	"log/slog"
 
 	"explo/src/config"
 	"explo/src/models"
@@ -48,7 +48,6 @@ type Items struct {
 	Album       string   `json:"Album,omitempty"`
 	AlbumArtist string   `json:"AlbumArtist,omitempty"`
 	Artists     []string `json:"Artists"`
-
 }
 
 type JFPlaylist struct {
@@ -285,21 +284,7 @@ func (c *Jellyfin) DeletePlaylist() error {
 	queryParams := fmt.Sprintf("/Items/%s", c.Cfg.PlaylistID)
 
 	if _, err := c.HttpClient.MakeRequest("DELETE", c.Cfg.URL+queryParams, nil, c.Cfg.Creds.Headers); err != nil {
-		return fmt.Errorf("deleyeJfPlaylist(): %s", err.Error())
+		return fmt.Errorf("deleteJfPlaylist(): %s", err.Error())
 	}
 	return nil
-}
-
-func formatJFSongs(tracks []*models.Track) ([]byte, error) { // marshal track IDs
-	songIDs := make([]string, 0, len(tracks))
-	for _, track := range tracks {
-		if track.Present {
-			songIDs = append(songIDs, track.ID)
-		}
-	}
-	songs, err := json.Marshal(songIDs)
-	if err != nil {
-		return nil, err
-	}
-	return songs, nil
 }

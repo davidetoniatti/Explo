@@ -14,5 +14,4 @@ type Track struct {
 	Size         int    // File size
 	Present      bool   // is track present in the system or not
 	Duration     int    // Track duration in milliseconds (not available for every track)
-	CoverURL     string // External cover art URL (Cover Art Archive), used at run-time to download art
 }

@@ -111,6 +111,7 @@ func (c *DownloadClient) DeleteSongs() {
 	entries, err := os.ReadDir(c.Cfg.DownloadDir)
 	if err != nil {
 		slog.Error("failed to read directory", "context", err.Error())
+		return
 	}
 	for _, entry := range entries {
 		if !(entry.IsDir()) {
