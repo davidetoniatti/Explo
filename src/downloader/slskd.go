@@ -15,6 +15,9 @@ import (
 	"time"
 )
 
+// searchPollInterval is how often searchStatus polls slskd for search completion.
+const searchPollInterval = 15 * time.Second
+
 type Search struct {
 	EndedAt         time.Time `json:"endedAt"`
 	FileCount       int       `json:"fileCount"`
@@ -199,29 +202,34 @@ func (c Slskd) searchTrack(track *models.Track) (string, error) {
 	return queryResult.ID, nil
 }
 
-func (c Slskd) searchStatus(ID, trackDetails string, count int) (bool, error) { // Recursive func to see if search for track is finished
+func (c Slskd) searchStatus(ID, trackDetails string, count int) (bool, error) { // Polls slskd until the search for a track completes or retries are exhausted
 	reqParams := fmt.Sprintf("/api/v0/searches/%s", ID)
 
-	body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+reqParams, nil, c.Headers)
-	if err != nil {
-		return false, err
-	}
-	var queryResult Search
-	if err := util.ParseResp(body, &queryResult); err != nil {
-		return false, err
-	}
-	if queryResult.IsComplete && queryResult.FileCount > 0 {
-		return true, nil
-	} else if queryResult.IsComplete && (queryResult.FileCount == 0 || queryResult.FileCount == queryResult.LockedFileCount) {
-		return false, fmt.Errorf("search complete, did not find any available files for %s", trackDetails)
-	} else if count >= c.Cfg.Retry {
-		slog.Debug(fmt.Sprintf("failed to remove %s", ID), logging.RuntimeAttr(""))
-		return false, fmt.Errorf("search wasn't completed after %d retries, skipping %s", count, trackDetails)
-	}
+	ticker := time.NewTicker(searchPollInterval)
+	defer ticker.Stop()
 
-	slog.Debug(fmt.Sprintf("[%s] (%d/%d) Searching for %s", "slskd", count, c.Cfg.Retry, trackDetails))
-	time.Sleep(15 * time.Second)
-	return c.searchStatus(ID, trackDetails, count+1)
+	for {
+		body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+reqParams, nil, c.Headers)
+		if err != nil {
+			return false, err
+		}
+		var queryResult Search
+		if err := util.ParseResp(body, &queryResult); err != nil {
+			return false, err
+		}
+		if queryResult.IsComplete && queryResult.FileCount > 0 {
+			return true, nil
+		} else if queryResult.IsComplete && (queryResult.FileCount == 0 || queryResult.FileCount == queryResult.LockedFileCount) {
+			return false, fmt.Errorf("search complete, did not find any available files for %s", trackDetails)
+		} else if count >= c.Cfg.Retry {
+			slog.Debug(fmt.Sprintf("search retries exhausted for %s", ID), logging.RuntimeAttr(""))
+			return false, fmt.Errorf("search wasn't completed after %d retries, skipping %s", count, trackDetails)
+		}
+
+		slog.Debug(fmt.Sprintf("[%s] (%d/%d) Searching for %s", "slskd", count, c.Cfg.Retry, trackDetails))
+		<-ticker.C
+		count++
+	}
 }
 
 func (c Slskd) searchResults(ID string) (SearchResults, error) {
