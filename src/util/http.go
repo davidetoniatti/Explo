@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -16,14 +17,26 @@ type HttpClientConfig struct {
 }
 
 type HttpClient struct {
-	Client    *http.Client
-	UserAgent string
+	Client       *http.Client // used for regular API calls, bounded by Timeout
+	StreamClient *http.Client // used for GetStream (file downloads); no total timeout, since it also bounds reading the body
+	UserAgent    string
 }
 
 func NewHttp(cfg HttpClientConfig) *HttpClient {
 	return &HttpClient{
 		Client: &http.Client{
 			Timeout: time.Duration(cfg.Timeout) * time.Second,
+		},
+		StreamClient: &http.Client{
+			// no overall Timeout: http.Client.Timeout bounds the entire exchange, including
+			// reading the response body, which would abort large file downloads mid-stream.
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout: time.Duration(cfg.Timeout) * time.Second,
+				}).DialContext,
+				TLSHandshakeTimeout:   time.Duration(cfg.Timeout) * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
+			},
 		},
 		UserAgent: "Explo (+https://github.com/LumePart/explo))",
 	}
@@ -77,7 +90,7 @@ func (c *HttpClient) GetStream(url string, headers map[string]string) (io.ReadCl
 		req.Header.Add(key, value)
 	}
 
-	resp, err := c.Client.Do(req)
+	resp, err := c.StreamClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %s", err.Error())
 	}
