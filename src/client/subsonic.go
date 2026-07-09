@@ -218,6 +218,9 @@ func (c *Subsonic) CheckRefreshState() bool {
 func (c *Subsonic) CreatePlaylist(tracks []*models.Track) error {
 	var trackIDs strings.Builder
 	for _, track := range tracks { // build songID parameters
+		if !track.Present || track.ID == "" {
+			continue
+		}
 		fmt.Fprintf(&trackIDs, "&songId=%s", track.ID)
 	}
 
