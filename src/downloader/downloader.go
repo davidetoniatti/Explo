@@ -100,7 +100,7 @@ func (c *DownloadClient) StartDownload(tracks *[]*models.Track) {
 
 func (c *DownloadClient) needsDownloadDir() bool {
 	for _, svc := range c.Cfg.Services {
-		if svc == "youtube" || svc == "youtube-music" || svc == "qobuz" || svc == "squidwtf-qobuz" {
+		if svc == "youtube" || svc == "qobuz" || svc == "squidwtf-qobuz" {
 			return true
 		}
 	}

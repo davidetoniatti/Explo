@@ -98,11 +98,26 @@ func (c *Youtube) QueryTrack(track *models.Track) error { // Queries youtube for
 	return nil
 }
 
+// ytMusicScriptPath resolves the path to search_ytmusic.py. It defaults to the
+// directory of the running binary (so it works from any CWD, not just the Docker
+// image's WORKDIR), with an optional override via YTMUSIC_SCRIPT_PATH.
+func ytMusicScriptPath() string {
+	if p := os.Getenv("YTMUSIC_SCRIPT_PATH"); p != "" {
+		return p
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		slog.Warn("failed to resolve executable path, falling back to CWD-relative script path", "context", err.Error())
+		return "search_ytmusic.py"
+	}
+	return filepath.Join(filepath.Dir(exe), "search_ytmusic.py")
+}
+
 func queryYTMusic(track *models.Track, query string) error {
 
 	slog.Debug(fmt.Sprintf("Querying YTMusic for track %s", query))
 
-	cmd := exec.Command("python3", "search_ytmusic.py", query, "1")
+	cmd := exec.Command("python3", ytMusicScriptPath(), query, "1")
 
 	out, err := cmd.Output()
 	if err != nil {

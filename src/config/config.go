@@ -78,7 +78,6 @@ type SubsonicConfig struct {
 type DownloadConfig struct {
 	DownloadDir     string `env:"DOWNLOAD_DIR" env-default:"/data/"`
 	Youtube         Youtube
-	YoutubeMusic    YoutubeMusic
 	Slskd           Slskd
 	Qobuz           Qobuz
 	ExcludeLocal    bool
@@ -110,12 +109,6 @@ type Youtube struct {
 	FileExtension string `env:"TRACK_EXTENSION" env-default:"opus"`
 	CookiesPath   string `env:"COOKIES_PATH" env-default:"./cookies.txt"`
 	Filters       Filters
-}
-
-type YoutubeMusic struct {
-	FfmpegPath string `env:"FFMPEG_PATH"`
-	YtdlpPath  string `env:"YTDLP_PATH"`
-	Filters    Filters
 }
 
 type Slskd struct {
