@@ -1,13 +1,13 @@
 services:
   explo:
-    image: ghcr.io/lumepart/explo:latest
+    image: ghcr.io/davidetoniatti/explo:latest
     restart: unless-stopped
     container_name: explo
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - /path/to/.env:/opt/explo/.env
-      - /path/to/explo/config:/opt/explo/config # required — stores playlist cache and cover art
+      - /path/to/explo/config:/opt/explo/config # optional — leftover from the removed web UI, not used by the CLI; safe to omit
       - /path/to/musiclibrary/explo:/data/ # has to be in the same path you have your music system pointed to (it's recommended to put explo under a subfolder)
       # - /path/to/slskd/downloads:/slskd/ # if using slskd and MIGRATE_DOWNLOADS is set to true in .env
       # - $PLAYLIST_DIR:$PLAYLIST_DIR # for MPD. Both paths should be as defined in .env (e.g /my/playlists/:/my/playlists/)
@@ -19,8 +19,7 @@ services:
       - PGID=1000 # Optional: Group ID for file permissions
 
 
-      # [Legacy] Schedules are managed through the web UI.
-      # These can still be set here for backwards compatibility — they will take precedence over the UI.
+      # Schedules are configured via *_SCHEDULE/*_FLAGS environment variables (read by docker/start.sh).
       #- WEEKLY_EXPLORATION_SCHEDULE=15 00 * * 2
       #- WEEKLY_EXPLORATION_FLAGS=
       #- WEEKLY_JAMS_SCHEDULE=30 00 * * 1

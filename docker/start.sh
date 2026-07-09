@@ -25,17 +25,18 @@ if [ -d "/data" ]; then
 fi
 
 # If user incorectly mounts the config path as a directory, we'll try to automatically append it to .env inside it instead of failing.
-WEB_CFG_PATH="${WEB_CFG_PATH:-/opt/explo/.env}"
-if [ -d "$WEB_CFG_PATH" ]; then
-    WEB_CFG_PATH="$WEB_CFG_PATH/.env"
-    echo "[setup] Config path is a directory, using $WEB_CFG_PATH"
+# CFG_PATH replaces the old WEB_CFG_PATH name (kept as a fallback for backwards compatibility).
+CFG_PATH="${CFG_PATH:-${WEB_CFG_PATH:-/opt/explo/.env}}"
+if [ -d "$CFG_PATH" ]; then
+    CFG_PATH="$CFG_PATH/.env"
+    echo "[setup] Config path is a directory, using $CFG_PATH"
 fi
 
 echo "[setup] Initializing cron jobs..."
 
-# Load *_SCHEDULE and *_FLAGS from .env if not already set in the environment.
-# This allows the web UI to configure schedules by writing to the .env file.
-_cfg="${WEB_CFG_PATH:-/opt/explo/.env}"
+# Load *_SCHEDULE and *_FLAGS from .env if not already set in the environment,
+# so schedules can be configured by editing the mounted .env file directly.
+_cfg="${CFG_PATH:-/opt/explo/.env}"
 if [ -f "$_cfg" ]; then
   while IFS= read -r _line; do
     case "$_line" in \#*|'') continue ;; esac
