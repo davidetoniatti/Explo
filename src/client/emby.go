@@ -277,6 +277,7 @@ func (c *Emby) DeletePlaylist() error { // Doesn't currently work due to a bug i
 	if _, err := util.MakeRequest("POST", c.Cfg.URL+reqParam, nil, c.Cfg.Creds.Headers); err != nil {
 		return err
 	} */
+	slog.Warn("playlist deletion is unsupported on Emby (upstream bug), skipping", "playlistID", c.Cfg.PlaylistID)
 	return nil
 }
 
