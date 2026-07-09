@@ -294,17 +294,22 @@ func (c *ListenBrainz) getImportPlaylist(user string) (string, error) {
 		var body []byte
 		var err error
 
-		for retries := range 5 {
+		for retries := range c.cfg.RetryAttempts {
 			body, err = c.lbRequest(fmt.Sprintf("user/%s/playlists/createdfor?offset=%d", user, offset))
 			if err == nil {
 				break
 			}
+			delay := c.cfg.RetryBaseDelay << retries // exponential backoff: baseDelay * 2^retries
+			if delay > c.cfg.RetryMaxDelay || delay <= 0 {
+				delay = c.cfg.RetryMaxDelay
+			}
 			slog.Warn(
-				"failed getting response from ListenBrainz, retrying in 5 minutes",
+				"failed getting response from ListenBrainz, retrying",
 				"retry", retries+1,
+				"delay", delay,
 				"error", err,
 			)
-			time.Sleep(5 * time.Minute)
+			time.Sleep(delay)
 		}
 
 		if err != nil {
@@ -339,7 +344,6 @@ func (c *ListenBrainz) getImportPlaylist(user string) (string, error) {
 	}
 	return bestID, nil
 }
-
 
 func (c *ListenBrainz) parsePlaylist(identifier string, singleArtist bool) ([]*models.Track, error) {
 	body, err := c.lbRequest(fmt.Sprintf("playlist/%s", identifier))

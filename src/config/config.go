@@ -136,7 +136,10 @@ type Listenbrainz struct {
 	Discovery      string `env:"LISTENBRAINZ_DISCOVERY" env-default:"playlist"`
 	User           string `env:"LISTENBRAINZ_USER"`
 	ImportPlaylist string
-	SingleArtist   bool `env:"SINGLE_ARTIST" env-default:"true"`
+	SingleArtist   bool          `env:"SINGLE_ARTIST" env-default:"true"`
+	RetryAttempts  int           `env:"LISTENBRAINZ_RETRY_ATTEMPTS" env-default:"5"`
+	RetryBaseDelay time.Duration `env:"LISTENBRAINZ_RETRY_BASE_DELAY" env-default:"15s"`
+	RetryMaxDelay  time.Duration `env:"LISTENBRAINZ_RETRY_MAX_DELAY" env-default:"5m"`
 }
 
 type NotifyConfig struct {
