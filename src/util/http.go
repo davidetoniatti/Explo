@@ -96,7 +96,9 @@ func (c *HttpClient) GetStream(url string, headers map[string]string) (io.ReadCl
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		resp.Body.Close()
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("response body close failed", "context", cerr.Error())
+		}
 		return nil, fmt.Errorf("got %d from %s", resp.StatusCode, url)
 	}
 

@@ -1,0 +1,27 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - sloglint
+    - unused
+    - unparam
+  settings:
+    sloglint:
+      # slog is not printf: forbid passing extra positional args to a message string
+      # (this is exactly the class of bug fixed in task 1.5 - see plex.go history).
+      no-mixed-args: true
+    errcheck:
+      # Checking the error from a deferred Close() on an HTTP response body / stream
+      # right before returning is extremely low value across this codebase (dozens of
+      # call sites) and errcheck's own docs recommend this exact exclusion. Close()
+      # calls that matter for correctness (e.g. flushing writes before further
+      # processing) are already checked explicitly - see downloader.go/mpd.go/qobuz_common.go.
+      exclude-functions:
+        - (io.Closer).Close
