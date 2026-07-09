@@ -3,6 +3,11 @@ FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 # Set the working directory
 WORKDIR /app
 
+# Copy go.mod/go.sum first and download modules so this layer is cached
+# and skipped on source-only changes.
+COPY go.mod go.sum ./
+RUN go mod download
+
 # Copy the Go source code into the container
 COPY ./ .
 
@@ -22,8 +27,8 @@ RUN apk add --no-cache \
     shadow \
     su-exec 
 
-# Install ytmusicapi in the container
-RUN pip install --no-cache-dir ytmusicapi
+# Install ytmusicapi in the container, pinned to a known-good version
+RUN pip install --no-cache-dir ytmusicapi==1.10.0
 
 # Set working directory
 WORKDIR /opt/explo/
