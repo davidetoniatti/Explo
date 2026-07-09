@@ -3,9 +3,10 @@ package client
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"log/slog"
+	"strings"
 
 	"explo/src/config"
 	"explo/src/models"
@@ -79,14 +80,33 @@ func (c *MPD) CheckRefreshState() bool {
 }
 
 func (c *MPD) CreatePlaylist(tracks []*models.Track) error {
-	f, err := os.OpenFile(c.Cfg.PlaylistDir+c.Cfg.PlaylistName+".m3u", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
+	playlistPath := c.Cfg.PlaylistDir + c.Cfg.PlaylistName + ".m3u"
+
+	// Read existing entries so re-running (e.g. with --persist) doesn't duplicate lines.
+	existing := make(map[string]bool)
+	if data, err := os.ReadFile(playlistPath); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if line != "" {
+				existing[line] = true
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("failed to read existing playlist", "error", err.Error())
+	}
+
+	f, err := os.OpenFile(playlistPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			slog.Error(fmt.Sprintf("failed to close playlist file: %s", cerr.Error()))
+		}
+	}()
 
 	for _, track := range tracks {
-		if track.Present {
-			_, err := f.Write([]byte(track.File+"\n"))
+		if track.Present && !existing[track.File] {
+			_, err := f.Write([]byte(track.File + "\n"))
 			if err != nil {
 				slog.Warn(fmt.Sprintf("failed to write song to file: %s", err.Error()))
 			}
@@ -96,10 +116,10 @@ func (c *MPD) CreatePlaylist(tracks []*models.Track) error {
 }
 
 func (c *MPD) SearchPlaylist() error {
-	if _, err := os.Stat(c.Cfg.PlaylistDir+c.Cfg.PlaylistName+".m3u"); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(c.Cfg.PlaylistDir + c.Cfg.PlaylistName + ".m3u"); errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("did not find playlist: %s", c.Cfg.PlaylistName)
 	} else {
-		c.Cfg.PlaylistID = c.Cfg.PlaylistDir+c.Cfg.PlaylistName+".m3u"
+		c.Cfg.PlaylistID = c.Cfg.PlaylistDir + c.Cfg.PlaylistName + ".m3u"
 		return nil
 	}
 }
