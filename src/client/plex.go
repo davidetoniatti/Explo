@@ -194,7 +194,7 @@ func (c *Plex) GetLibrary() error {
 		slog.Debug(err.Error())
 		return fmt.Errorf("library named %s not found and cannot be added, please create it manually and ensure 'Prefer local metadata' is checked", c.Cfg.LibraryName)
 	}
-	return fmt.Errorf("library '%s' not found", c.Cfg.LibraryName)
+	return nil
 }
 
 func (c *Plex) AddLibrary() error {
