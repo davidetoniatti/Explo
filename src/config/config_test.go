@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestConfig_ReadEnv(t *testing.T) {
@@ -55,5 +57,99 @@ func TestConfig_GenPlaylistName(t *testing.T) {
 
 	if cfg.DownloadCfg.DownloadDir != expectedDownloadDir {
 		t.Errorf("expected DownloadDir to be '%s', got '%s'", expectedDownloadDir, cfg.DownloadCfg.DownloadDir)
+	}
+}
+
+func TestGetPlaylistName(t *testing.T) {
+	now := time.Now()
+	year, week := now.ISOWeek()
+
+	tests := []struct {
+		name         string
+		playlistType string
+		format       string
+		persist      bool
+		want         string
+	}{
+		{
+			name:         "non-persist always uses base name regardless of format",
+			playlistType: "weekly-exploration",
+			format:       "date",
+			persist:      false,
+			want:         "Weekly-Exploration",
+		},
+		{
+			name:         "explicit date format",
+			playlistType: "weekly-exploration",
+			format:       "date",
+			persist:      true,
+			want:         fmt.Sprintf("Weekly-Exploration-%s", now.Format("2006-01-02")),
+		},
+		{
+			name:         "daily-jams special naming",
+			playlistType: "daily-jams",
+			format:       "week", // format is ignored for daily-jams
+			persist:      true,
+			want:         fmt.Sprintf("Daily-Jams-%d-Day%d", now.Year(), now.YearDay()),
+		},
+		{
+			name:         "default persistent naming uses ISO week",
+			playlistType: "weekly-exploration",
+			format:       "week",
+			persist:      true,
+			want:         fmt.Sprintf("Weekly-Exploration-%d-Week%d", year, week),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getPlaylistName(tt.playlistType, tt.format, tt.persist)
+			if got != tt.want {
+				t.Errorf("getPlaylistName(%q, %q, %v) = %q, want %q", tt.playlistType, tt.format, tt.persist, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFixDir(t *testing.T) {
+	tests := []struct {
+		name string
+		dir  string
+		want string
+	}{
+		{name: "empty string stays empty", dir: "", want: ""},
+		{name: "adds trailing slash when missing", dir: "/data", want: "/data/"},
+		{name: "leaves trailing slash untouched", dir: "/data/", want: "/data/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixDir(tt.dir); got != tt.want {
+				t.Errorf("fixDir(%q) = %q, want %q", tt.dir, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFixBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "empty string stays empty", url: "", want: ""},
+		{name: "whitespace-only string becomes empty", url: "   ", want: ""},
+		{name: "adds scheme when missing", url: "example.com", want: "http://example.com"},
+		{name: "trims trailing slash", url: "https://example.com/", want: "https://example.com"},
+		{name: "trims surrounding whitespace", url: "  https://example.com  ", want: "https://example.com"},
+		{name: "no scheme and trailing slash combined", url: "example.com/", want: "http://example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixBaseURL(tt.url); got != tt.want {
+				t.Errorf("fixBaseURL(%q) = %q, want %q", tt.url, got, tt.want)
+			}
+		})
 	}
 }
