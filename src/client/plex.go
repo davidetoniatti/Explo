@@ -253,13 +253,13 @@ func (c *Plex) SearchSongs(tracks []*models.Track) error {
 
 		body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+params, nil, c.Cfg.Creds.Headers)
 		if err != nil {
-			slog.Warn("search request failed for '%s': %s", track.Title, err.Error())
+			slog.Warn("search request failed", "track", track.Title, "error", err.Error())
 			continue
 		}
 
 		var searchResults PlexSearch
 		if err = util.ParseResp(body, &searchResults); err != nil {
-			slog.Warn("failed to parse response for '%s': %s", track.Title, err.Error())
+			slog.Warn("failed to parse response", "track", track.Title, "error", err.Error())
 			continue
 		}
 		key, err := getPlexSong(track, searchResults)
@@ -395,7 +395,7 @@ func (c *Plex) addtoPlaylist(tracks []*models.Track) {
 			params := fmt.Sprintf("/playlists/%s/items?uri=server://%s/com.plexapp.plugins.library%s", c.Cfg.PlaylistID, c.machineID, track.ID)
 
 			if _, err := c.HttpClient.MakeRequest("PUT", c.Cfg.URL+params, nil, c.Cfg.Creds.Headers); err != nil {
-				slog.Warn("failed to add %s to playlist: %s", track.Title, err.Error())
+				slog.Warn("failed to add track to playlist", "track", track.Title, "error", err.Error())
 			}
 		}
 	}
