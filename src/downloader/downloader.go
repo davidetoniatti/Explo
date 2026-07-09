@@ -201,7 +201,7 @@ func (c *DownloadClient) MoveDownload(srcDir, destDir, trackPath string, track *
 
 	defer func() {
 		if cerr := in.Close(); cerr != nil {
-			slog.Error(fmt.Sprintf("failed to close source file: %s", err.Error()))
+			slog.Error(fmt.Sprintf("failed to close source file: %s", cerr.Error()))
 		}
 	}()
 
