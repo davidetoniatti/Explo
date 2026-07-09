@@ -67,6 +67,22 @@ func (s *CaptchaSolver) GetCaptchaCookie(baseUrl string) (string, error) {
 	return s.CookieHeader, nil
 }
 
+// Refresh forces a fresh captcha solve (e.g. after the server rejected the cached
+// cookie), stores the resulting cookie+expiry under the mutex, and returns it.
+func (s *CaptchaSolver) Refresh(baseUrl string) (string, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+
+	cookie, err := s.SolveAndVerify(baseUrl)
+	if err != nil {
+		return "", err
+	}
+
+	s.CookieHeader = cookie
+	s.CookieExpires = time.Now().Add(CookieValidity)
+	return s.CookieHeader, nil
+}
+
 func (s *CaptchaSolver) SolveAndVerify(baseUrl string) (string, error) {
 	trimmed := strings.TrimRight(baseUrl, "/")
 

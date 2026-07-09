@@ -224,8 +224,7 @@ func (c *SquidWTFQobuz) getDownloadURL(trackID, quality string, forceRefresh boo
 		body, _ := io.ReadAll(resp.Body)
 		if strings.Contains(strings.ToLower(string(body)), "captcha required") {
 			slog.Info("Qobuz captcha required, refreshing session and retrying")
-			_, err := c.CaptchaSolver.SolveAndVerify(QobuzBaseUrl)
-			if err != nil {
+			if _, err := c.CaptchaSolver.Refresh(QobuzBaseUrl); err != nil {
 				return "", err
 			}
 			return c.getDownloadURL(trackID, quality, true)
