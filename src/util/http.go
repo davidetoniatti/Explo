@@ -38,7 +38,7 @@ func NewHttp(cfg HttpClientConfig) *HttpClient {
 				ResponseHeaderTimeout: 30 * time.Second,
 			},
 		},
-		UserAgent: "Explo (+https://github.com/LumePart/explo))",
+		UserAgent: "Explo (+https://github.com/davidetoniatti/Explo)",
 	}
 }
 
