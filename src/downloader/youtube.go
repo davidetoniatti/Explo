@@ -69,10 +69,6 @@ func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util
 		gouTubeOpts: opts}
 }
 
-func (c *Youtube) GetConf() (MonitorConfig, error) {
-	return MonitorConfig{}, fmt.Errorf("[youtube] no monitoring required")
-}
-
 func (c *Youtube) QueryTrack(track *models.Track) error { // Queries youtube for the song
 
 	query := fmt.Sprintf("%s - %s", track.Title, track.Artist)
@@ -257,12 +253,4 @@ func fetchAndSaveVideo(ctx context.Context, cfg Youtube, track models.Track) boo
 
 	slog.Error("stream was empty for video", "trackID", track.ID)
 	return false
-}
-
-func (c *Youtube) GetDownloadStatus(tracks []*models.Track) (map[string]FileStatus, error) {
-	return nil, fmt.Errorf("no monitoring required")
-}
-
-func (c *Youtube) Cleanup(track models.Track, ID string) error {
-	return nil
 }

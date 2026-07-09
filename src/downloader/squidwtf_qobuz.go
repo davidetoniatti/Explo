@@ -315,15 +315,3 @@ func (c *SquidWTFQobuz) getExtension(quality string) string {
 	}
 	return "flac"
 }
-
-func (c *SquidWTFQobuz) GetDownloadStatus(tracks []*models.Track) (map[string]FileStatus, error) {
-	return nil, fmt.Errorf("no monitoring required")
-}
-
-func (c *SquidWTFQobuz) GetConf() (MonitorConfig, error) {
-	return MonitorConfig{}, fmt.Errorf("[squidwtf-qobuz] no monitoring required")
-}
-
-func (c *SquidWTFQobuz) Cleanup(track models.Track, ID string) error {
-	return nil
-}

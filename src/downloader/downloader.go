@@ -24,7 +24,6 @@ type DownloadClient struct {
 type Downloader interface {
 	QueryTrack(*models.Track) error
 	GetTrack(*models.Track) error
-	Monitor
 }
 
 // get download services from config and append them to DownloadClient

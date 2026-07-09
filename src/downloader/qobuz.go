@@ -452,15 +452,3 @@ func (c *Qobuz) downloadAndSave(downloadURL string, track *models.Track) error {
 
 	return nil
 }
-
-func (c *Qobuz) GetDownloadStatus(tracks []*models.Track) (map[string]FileStatus, error) {
-	return nil, fmt.Errorf("no monitoring required")
-}
-
-func (c *Qobuz) GetConf() (MonitorConfig, error) {
-	return MonitorConfig{}, fmt.Errorf("[qobuz] no monitoring required")
-}
-
-func (c *Qobuz) Cleanup(track models.Track, ID string) error {
-	return nil
-}
