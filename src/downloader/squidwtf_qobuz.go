@@ -7,15 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
 
 	"explo/src/config"
 	"explo/src/models"
 	"explo/src/util"
-
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 const QobuzBaseUrl = "https://qobuz.squid.wtf"
@@ -149,23 +146,7 @@ func (c *SquidWTFQobuz) QueryTrack(track *models.Track) error {
 		return fmt.Errorf("no Qobuz tracks found for: %s", query)
 	}
 
-	var bestTrack *QobuzTrack
-	for _, qobuzTrack := range searchResp.Data.Tracks.Items {
-		if ContainsKeyword(*track, qobuzTrack.Title, c.Cfg.Filters.FilterList) {
-			continue
-		}
-
-		// If duration is available, check for a match within 10 seconds
-		if track.Duration > 0 && qobuzTrack.Duration > 0 {
-			if util.Abs(track.Duration/1000-qobuzTrack.Duration) > 10 {
-				continue
-			}
-		}
-
-		bestTrack = &qobuzTrack
-		break
-	}
-
+	bestTrack := pickBestQobuzTrack(track, searchResp.Data.Tracks.Items, c.Cfg.Filters.FilterList)
 	if bestTrack == nil {
 		return fmt.Errorf("no suitable Qobuz tracks found after filtering for: %s", query)
 	}
@@ -180,13 +161,14 @@ func (c *SquidWTFQobuz) QueryTrack(track *models.Track) error {
 }
 
 func (c *SquidWTFQobuz) GetTrack(track *models.Track) error {
-	quality := c.getQuality()
+	formatId := qobuzQualityID(c.Cfg.Quality)
+	quality := strconv.Itoa(formatId)
 	downloadURL, err := c.getDownloadURL(track.ID, quality, false)
 	if err != nil {
 		return err
 	}
 
-	track.File = fmt.Sprintf("%s.%s", getFilename(track.Title, track.Artist), c.getExtension(quality))
+	track.File = fmt.Sprintf("%s.%s", getFilename(track.Title, track.Artist), qobuzExtension(formatId))
 
 	err = c.downloadAndSave(downloadURL, track)
 	if err != nil {
@@ -253,65 +235,5 @@ func (c *SquidWTFQobuz) getDownloadURL(trackID, quality string, forceRefresh boo
 }
 
 func (c *SquidWTFQobuz) downloadAndSave(downloadURL string, track *models.Track) error {
-	stream, err := c.HttpClient.GetStream(downloadURL, nil)
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-
-	tempFile := filepath.Join(c.DownloadDir, track.File+".tmp")
-	file, err := os.Create(tempFile)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(file, stream)
-	file.Close() // Close before ffmpeg processing
-	if err != nil {
-		os.Remove(tempFile)
-		return err
-	}
-
-	destPath := filepath.Join(c.DownloadDir, track.File)
-
-	// Use ffmpeg to write metadata
-	cmd := ffmpeg.Input(tempFile).Output(destPath, ffmpeg.KwArgs{
-		"map":      "0:a",
-		"c:a":      "copy",
-		"metadata": []string{"artist=" + track.Artist, "title=" + track.Title, "album=" + track.Album},
-		"loglevel": "error",
-	}).OverWriteOutput().ErrorToStdOut()
-
-	if err = cmd.Run(); err != nil {
-		slog.Error("failed to write metadata", "service", "squidwtf-qobuz", "context", err.Error())
-		// If ffmpeg fails, try to at least move the original file so it's not lost
-		os.Rename(tempFile, destPath)
-	} else {
-		os.Remove(tempFile)
-	}
-
-	return nil
-}
-
-func (c *SquidWTFQobuz) getQuality() string {
-	q := strings.ToUpper(c.Cfg.Quality)
-	switch q {
-	case "FLAC_24_192", "FLAC_24", "27":
-		return "27"
-	case "FLAC_24_96", "7":
-		return "7"
-	case "FLAC_16", "FLAC", "6":
-		return "6"
-	case "MP3_320", "MP3", "5":
-		return "5"
-	default:
-		return "27"
-	}
-}
-
-func (c *SquidWTFQobuz) getExtension(quality string) string {
-	if quality == "5" {
-		return "mp3"
-	}
-	return "flac"
+	return saveStreamWithMetadata(c.HttpClient, c.DownloadDir, downloadURL, track, "squidwtf-qobuz")
 }
