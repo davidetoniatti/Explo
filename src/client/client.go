@@ -70,6 +70,26 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	return c, nil
 }
 
+// TriggerRefresh asks the music system to rescan its library and waits for it to
+// settle. Used by --refresh-only, when tracks were added to the library by something
+// other than Explo.
+func TriggerRefresh(cfg *config.Config) error {
+	c, err := NewClient(cfg)
+	if err != nil {
+		return err
+	}
+
+	if err := c.API.RefreshLibrary(); err != nil {
+		return fmt.Errorf("failed to trigger a library refresh: %w", err)
+	}
+
+	if !c.API.CheckRefreshState() {
+		slog.Warn("library refresh did not complete in time", "system", c.System)
+	}
+
+	return nil
+}
+
 // systemSetup checks needed credentials and initializes the selected system
 func (c *Client) systemSetup() error {
 	switch c.System {

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -40,15 +43,15 @@ func TestConfig_GenPlaylistName(t *testing.T) {
 	cfg := &Config{}
 	cfg.Flags.Playlist = "weekly-exploration"
 	cfg.ClientCfg.PlaylistNFormat = "week"
-	cfg.Persist = false
+	cfg.ReplacePlaylist = true
 	cfg.DiscoveryCfg.Listenbrainz.User = "testuser"
 	cfg.DownloadCfg.UseSubDir = true
 	cfg.DownloadCfg.DownloadDir = "/tmp/explo"
 
 	cfg.GenPlaylistName()
 
-	// Since persist is false, folderName should be "Weekly-Exploration"
-	// and PlaylistName should be "Weekly Exploration"
+	// A replaced playlist keeps a stable name, so folderName should be
+	// "Weekly-Exploration" and PlaylistName "Weekly Exploration"
 	expectedPlaylistName := "Weekly Exploration"
 	expectedDownloadDir := "/tmp/explo/Weekly-Exploration"
 
@@ -69,44 +72,45 @@ func TestGetPlaylistName(t *testing.T) {
 		name         string
 		playlistType string
 		format       string
-		persist      bool
+		replace      bool
 		want         string
 	}{
 		{
-			name:         "non-persist always uses base name regardless of format",
+			// A playlist replaced in place keeps one name, so there is nothing to date
+			name:         "replacing always uses the base name, whatever the format",
 			playlistType: "weekly-exploration",
 			format:       "date",
-			persist:      false,
+			replace:      true,
 			want:         "Weekly-Exploration",
 		},
 		{
 			name:         "explicit date format",
 			playlistType: "weekly-exploration",
 			format:       "date",
-			persist:      true,
+			replace:      false,
 			want:         fmt.Sprintf("Weekly-Exploration-%s", now.Format("2006-01-02")),
 		},
 		{
 			name:         "daily-jams special naming",
 			playlistType: "daily-jams",
 			format:       "week", // format is ignored for daily-jams
-			persist:      true,
+			replace:      false,
 			want:         fmt.Sprintf("Daily-Jams-%d-Day%d", now.Year(), now.YearDay()),
 		},
 		{
-			name:         "default persistent naming uses ISO week",
+			name:         "keeping past playlists uses the ISO week",
 			playlistType: "weekly-exploration",
 			format:       "week",
-			persist:      true,
+			replace:      false,
 			want:         fmt.Sprintf("Weekly-Exploration-%d-Week%d", year, week),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getPlaylistName(tt.playlistType, tt.format, tt.persist)
+			got := getPlaylistName(tt.playlistType, tt.format, tt.replace)
 			if got != tt.want {
-				t.Errorf("getPlaylistName(%q, %q, %v) = %q, want %q", tt.playlistType, tt.format, tt.persist, got, tt.want)
+				t.Errorf("getPlaylistName(%q, %q, %v) = %q, want %q", tt.playlistType, tt.format, tt.replace, got, tt.want)
 			}
 		})
 	}
@@ -208,6 +212,207 @@ func TestShareDownloadSettings(t *testing.T) {
 
 		if cfg.DownloadCfg.CoversDir != "/custom/covers" {
 			t.Errorf("CoversDir = %q, want /custom/covers", cfg.DownloadCfg.CoversDir)
+		}
+	})
+}
+
+func TestResolveReplacePlaylist(t *testing.T) {
+	// Precedence: --replace-playlist, then the deprecated --persist, then
+	// REPLACE_PLAYLIST, then the deprecated PERSIST, then the flag default.
+	tests := []struct {
+		name  string
+		setup func(*Config)
+		env   map[string]string
+		want  bool
+	}{
+		{
+			name:  "defaults to replacing",
+			setup: func(c *Config) { c.Flags.ReplacePlaylist = true },
+			want:  true,
+		},
+		{
+			name: "the flag wins over everything",
+			setup: func(c *Config) {
+				c.Flags.ReplacePlaylist = false
+				c.Flags.ReplacePlaylistSet = true
+				c.Flags.Persist = false // would otherwise mean replace=true
+				c.Flags.PersistSet = true
+			},
+			env:  map[string]string{"REPLACE_PLAYLIST": "true", "PERSIST": "false"},
+			want: false,
+		},
+		{
+			name: "the deprecated flag is honoured, inverted",
+			setup: func(c *Config) {
+				c.Flags.Persist = true // keep past playlists
+				c.Flags.PersistSet = true
+			},
+			want: false,
+		},
+		{
+			name: "the deprecated flag set to false means replace",
+			setup: func(c *Config) {
+				c.Flags.Persist = false
+				c.Flags.PersistSet = true
+			},
+			want: true,
+		},
+		{
+			name: "the deprecated flag beats both variables",
+			setup: func(c *Config) {
+				c.Flags.Persist = true
+				c.Flags.PersistSet = true
+				c.ReplacePlaylistENV = true
+			},
+			env:  map[string]string{"REPLACE_PLAYLIST": "true"},
+			want: false,
+		},
+		{
+			name:  "REPLACE_PLAYLIST is used when no flag was given",
+			setup: func(c *Config) { c.ReplacePlaylistENV = false },
+			env:   map[string]string{"REPLACE_PLAYLIST": "false"},
+			want:  false,
+		},
+		{
+			name:  "the deprecated variable is honoured, inverted",
+			setup: func(c *Config) { c.PersistENV = true },
+			env:   map[string]string{"PERSIST": "true"},
+			want:  false,
+		},
+		{
+			name:  "the deprecated variable set to false means replace",
+			setup: func(c *Config) { c.PersistENV = false },
+			env:   map[string]string{"PERSIST": "false"},
+			want:  true,
+		},
+		{
+			name: "REPLACE_PLAYLIST beats the deprecated variable",
+			setup: func(c *Config) {
+				c.ReplacePlaylistENV = true
+				c.PersistENV = true // would otherwise mean replace=false
+			},
+			env:  map[string]string{"REPLACE_PLAYLIST": "true", "PERSIST": "true"},
+			want: true,
+		},
+		{
+			name: "an unset PERSIST does not override the default (edge case)",
+			// cleanenv defaults PersistENV to true, which inverted would mean
+			// replace=false. Only a variable actually supplied may have that effect.
+			setup: func(c *Config) {
+				c.Flags.ReplacePlaylist = true
+				c.PersistENV = true
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			cfg := &Config{}
+			tt.setup(cfg)
+
+			if got := cfg.resolveReplacePlaylist(); got != tt.want {
+				t.Errorf("resolveReplacePlaylist() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReplacePlaylistFromEnvFile(t *testing.T) {
+	// The deprecated variable is usually supplied through the .env file rather than
+	// the real environment. cleanenv exports the file into the environment as it
+	// reads it, which is what lets envIsSet tell "supplied" from "defaulted" apart.
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envFile, []byte("EXPLO_SYSTEM=emby\nPERSIST=false\n"), 0644); err != nil {
+		t.Fatalf("failed to write test .env: %v", err)
+	}
+	t.Cleanup(func() {
+		os.Unsetenv("EXPLO_SYSTEM")
+		os.Unsetenv("PERSIST")
+	})
+
+	cfg := &Config{}
+	cfg.Flags.CfgPath = envFile
+	cfg.Flags.ReplacePlaylist = true // the flag default, not explicitly set
+	cfg.ReadEnv()
+	cfg.MergeFlags()
+
+	// PERSIST=false is the inverse of REPLACE_PLAYLIST=true
+	if !cfg.ReplacePlaylist {
+		t.Errorf("expected PERSIST=false in the .env file to mean replace, got %v", cfg.ReplacePlaylist)
+	}
+	if !envIsSet("PERSIST") {
+		t.Error("expected envIsSet to see a variable supplied through the .env file")
+	}
+}
+
+func TestHandleDeprecationWarnsAboutLostCleanup(t *testing.T) {
+	// --persist=false used to delete downloaded tracks as well as the playlist. The
+	// warning is the only thing telling an upgrading user that half of what they asked
+	// for now needs a second flag.
+	capture := func(cfg *Config) string {
+		var buf bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		defer slog.SetDefault(previous)
+
+		cfg.HandleDeprecation()
+		return buf.String()
+	}
+
+	const want = "clean-downloads"
+
+	t.Run("warns when the deprecated flag asked for a replace", func(t *testing.T) {
+		cfg := &Config{}
+		cfg.Flags.Persist = false
+		cfg.Flags.PersistSet = true
+
+		if got := capture(cfg); !strings.Contains(got, want) {
+			t.Errorf("expected a warning mentioning %q, got %q", want, got)
+		}
+	})
+
+	t.Run("warns when the deprecated variable asked for a replace", func(t *testing.T) {
+		t.Setenv("PERSIST", "false")
+		cfg := &Config{}
+		cfg.PersistENV = false
+
+		if got := capture(cfg); !strings.Contains(got, want) {
+			t.Errorf("expected a warning mentioning %q, got %q", want, got)
+		}
+	})
+
+	t.Run("stays quiet once --clean-downloads is passed", func(t *testing.T) {
+		cfg := &Config{}
+		cfg.Flags.Persist = false
+		cfg.Flags.PersistSet = true
+		cfg.Flags.CleanDownloads = true
+		cfg.DownloadCfg.UseSubDir = true
+
+		if got := capture(cfg); strings.Contains(got, want) {
+			t.Errorf("expected no cleanup warning, got %q", got)
+		}
+	})
+
+	t.Run("stays quiet when the deprecated setting kept playlists", func(t *testing.T) {
+		// --persist=true never deleted anything, so there is nothing to warn about
+		cfg := &Config{}
+		cfg.Flags.Persist = true
+		cfg.Flags.PersistSet = true
+
+		if got := capture(cfg); strings.Contains(got, want) {
+			t.Errorf("expected no cleanup warning, got %q", got)
+		}
+	})
+
+	t.Run("stays quiet when nothing deprecated is used", func(t *testing.T) {
+		if got := capture(&Config{}); got != "" {
+			t.Errorf("expected no warnings at all, got %q", got)
 		}
 	})
 }

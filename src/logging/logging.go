@@ -4,12 +4,21 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+
+	"explo/src/config"
 )
 
-func Init(level string, notifyClient *NotificationClient) {
+func Init(cfg *config.Config) {
 	baseHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: getLogLevel(level),
+		Level: getLogLevel(cfg.LogLevel),
 	})
+
+	// Left nil when nothing is configured to receive notifications, so a run without
+	// them does not try to deliver to an empty set of channels.
+	var notifyClient *NotificationClient
+	if notifyEnabled(cfg.NotifyCfg) {
+		notifyClient = InitNotify(cfg.NotifyCfg)
+	}
 
 	handler := &notifyHandler{
 		handler: baseHandler,

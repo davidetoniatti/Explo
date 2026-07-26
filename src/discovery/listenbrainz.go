@@ -353,6 +353,21 @@ func (c *ListenBrainz) getTopRecordings(user string) ([]*models.Track, error) {
 	return tracks, nil
 }
 
+// LookupRecording resolves a single MusicBrainz recording ID into a track. Used by
+// --search-mbid to check what Explo would look for in the library.
+func (c *ListenBrainz) LookupRecording(mbid string) (*models.Track, error) {
+	// Uses the configured artist handling, so the title it reports is the one a real
+	// run would look for rather than a differently built one.
+	tracks, err := c.getTracks([]string{mbid}, c.cfg.SingleArtist)
+	if err != nil {
+		return nil, err
+	}
+	if len(tracks) == 0 {
+		return nil, fmt.Errorf("ListenBrainz returned no recording for %s", mbid)
+	}
+	return tracks[0], nil
+}
+
 func (c *ListenBrainz) getTracks(mbids []string, singleArtist bool) ([]*models.Track, error) {
 	strMbids := strings.Join(mbids, ",")
 
