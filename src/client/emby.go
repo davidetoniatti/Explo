@@ -28,13 +28,22 @@ type EmbyItemSearch struct {
 }
 
 type EmbyItems struct {
-	Name        string   `json:"Name"`
-	ServerID    string   `json:"ServerId"`
-	ID          string   `json:"Id"`
-	Path        string   `json:"Path"`
-	Album       string   `json:"Album,omitempty"`
-	AlbumArtist string   `json:"AlbumArtist,omitempty"`
-	Artists     []string `json:"Artists"`
+	Name        string      `json:"Name"`
+	ServerID    string      `json:"ServerId"`
+	ID          string      `json:"Id"`
+	Path        string      `json:"Path"`
+	Album       string      `json:"Album,omitempty"`
+	AlbumArtist string      `json:"AlbumArtist,omitempty"`
+	Artists     []string    `json:"Artists"`
+	ProviderIds ProviderIds `json:"ProviderIds"`
+}
+
+// ProviderIds holds the external identifiers Emby and Jellyfin store per item.
+type ProviderIds struct {
+	MusicBrainzTrack        string `json:"MusicBrainzTrack"`
+	MusicBrainzRecording    string `json:"MusicBrainzRecording"`
+	MusicBrainzAlbum        string `json:"MusicBrainzAlbum"`
+	MusicBrainzReleaseGroup string `json:"MusicBrainzReleaseGroup"`
 }
 
 type EmbyPlaylist struct {
@@ -168,7 +177,7 @@ func (c *Emby) CheckRefreshState() bool {
 
 func (c *Emby) SearchSongs(tracks []*models.Track) error {
 	for _, track := range tracks {
-		reqParam := fmt.Sprintf("/emby/Items?IncludeMediaTypes=Audio&SearchTerm=%s&Recursive=true&Fields=Path", url.QueryEscape(track.CleanTitle))
+		reqParam := fmt.Sprintf("/emby/Items?IncludeMediaTypes=Audio&SearchTerm=%s&Recursive=true&Fields=Path,ProviderIds", url.QueryEscape(util.CleanSearchTitle(track.CleanTitle)))
 
 		body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+reqParam, nil, c.Cfg.Creds.Headers)
 		if err != nil {
@@ -180,16 +189,19 @@ func (c *Emby) SearchSongs(tracks []*models.Track) error {
 			return err
 		}
 
+		normalizedTitles := trackTitles(track)
 		for _, item := range results.Items {
-			if strings.EqualFold(track.MainArtist, item.AlbumArtist) && (strings.EqualFold(item.Name, track.CleanTitle) || (track.File != "" && strings.Contains(strings.ToLower(item.Path), strings.ToLower(track.File)))) {
-				track.ID = item.ID
-				track.Present = true
-				break
-			}
-
-			if track.File != "" && len(item.Artists) > 0 &&
-				strings.Contains(strings.ToLower(item.Artists[0]), strings.ToLower(track.MainArtist)) &&
-				strings.Contains(strings.ToLower(item.Path), strings.ToLower(track.File)) {
+			if matchesTrack(track, normalizedTitles, libraryItem{
+				Title:       item.Name,
+				Album:       item.Album,
+				AlbumArtist: item.AlbumArtist,
+				Artists:     item.Artists,
+				Path:        item.Path,
+				MusicBrainzIDs: []string{
+					item.ProviderIds.MusicBrainzTrack,
+					item.ProviderIds.MusicBrainzRecording,
+				},
+			}) {
 				track.ID = item.ID
 				track.Present = true
 				break

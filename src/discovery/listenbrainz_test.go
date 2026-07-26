@@ -26,13 +26,19 @@ func TestBuildFeatTitle(t *testing.T) {
 			name:        "single featured artist",
 			cleanTitle:  "Song",
 			featArtists: []string{"Guest"},
-			want:        "Song feat. Guest",
+			want:        "Song (feat. Guest)",
 		},
 		{
-			name:        "several featured artists are comma separated",
+			name:        "two featured artists are joined with an ampersand",
+			cleanTitle:  "Song",
+			featArtists: []string{"One", "Two"},
+			want:        "Song (feat. One & Two)",
+		},
+		{
+			name:        "three or more use commas then an ampersand",
 			cleanTitle:  "Song",
 			featArtists: []string{"One", "Two", "Three"},
-			want:        "Song feat. One, Two, Three",
+			want:        "Song (feat. One, Two & Three)",
 		},
 	}
 
@@ -289,8 +295,8 @@ func TestApplyLBMetadata(t *testing.T) {
 		track := &models.Track{}
 		c.applyLBMetadata(track, meta, true)
 
-		if track.Title != "Song feat. Guest" {
-			t.Errorf("Title = %q, want %q", track.Title, "Song feat. Guest")
+		if track.Title != "Song (feat. Guest)" {
+			t.Errorf("Title = %q, want %q", track.Title, "Song (feat. Guest)")
 		}
 		if track.Artist != "Main" {
 			t.Errorf("Artist = %q, want Main", track.Artist)
