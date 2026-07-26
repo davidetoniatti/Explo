@@ -81,6 +81,9 @@ type SubsonicConfig struct {
 type DownloadConfig struct {
 	DownloadDir       string `env:"DOWNLOAD_DIR" env-default:"/data/"`
 	FfmpegPath        string `env:"FFMPEG_PATH"`
+	PathTemplate      string `env:"PATH_TEMPLATE"` // e.g. {{Artist}}/{{Album}}/{{TrackNumber}} - {{TrackName}}.{{ext}}
+	EmbedCoverArt     bool   `env:"EMBED_COVER_ART" env-default:"false"`
+	CoversDir         string `env:"COVERS_DIR"` // defaults to a directory under the system temp dir
 	Youtube           Youtube
 	Slskd             Slskd
 	Qobuz             Qobuz
@@ -106,6 +109,11 @@ type Qobuz struct {
 	UserId        string `env:"QOBUZ_USER_ID"`
 	FfmpegPath    string `env:"FFMPEG_PATH"`
 	Filters       Filters
+
+	// copied from DownloadConfig by CommonFixes
+	PathTemplate  string
+	CoversDir     string
+	EmbedCoverArt bool
 }
 
 type Youtube struct {
@@ -115,6 +123,11 @@ type Youtube struct {
 	FileExtension string `env:"TRACK_EXTENSION" env-default:"opus"`
 	CookiesPath   string `env:"COOKIES_PATH" env-default:"./cookies.txt"`
 	Filters       Filters
+
+	// copied from DownloadConfig by CommonFixes
+	PathTemplate  string
+	CoversDir     string
+	EmbedCoverArt bool
 }
 
 type Slskd struct {
@@ -135,12 +148,14 @@ type SlskdMon struct {
 }
 
 type DiscoveryConfig struct {
-	Discovery    string `env:"DISCOVERY_SERVICE" env-default:"listenbrainz"`
-	Listenbrainz Listenbrainz
+	Discovery       string   `env:"DISCOVERY_SERVICE" env-default:"listenbrainz"`
+	ArtistBlacklist []string `env:"ARTIST_BLACKLIST"` // artist names or MusicBrainz artist IDs to skip
+	Listenbrainz    Listenbrainz
 }
 type Listenbrainz struct {
 	Discovery           string `env:"LISTENBRAINZ_DISCOVERY" env-default:"playlist"`
 	User                string `env:"LISTENBRAINZ_USER"`
+	UserToken           string `env:"LISTENBRAINZ_USER_TOKEN"`
 	ImportPlaylist      string
 	SingleArtist        bool          `env:"SINGLE_ARTIST" env-default:"true"`
 	CoverArtSize        string        `env:"COVER_ART_SIZE" env-default:"250"`
@@ -194,9 +209,30 @@ func (cfg *Config) ReadEnv() {
 
 func (cfg *Config) CommonFixes() {
 	cfg.DownloadCfg.Youtube.FileExtension = strings.TrimPrefix(cfg.DownloadCfg.Youtube.FileExtension, ".")
+	cfg.shareDownloadSettings()
 	cfg.ClientCfg.URL = fixBaseURL(cfg.ClientCfg.URL)
 	cfg.DownloadCfg.Slskd.URL = fixBaseURL(cfg.DownloadCfg.Slskd.URL)
 	cfg.NormalizeDir()
+}
+
+// shareDownloadSettings copies the output settings that apply to every downloader
+// down into the per-downloader configs, which is all their constructors receive.
+func (cfg *Config) shareDownloadSettings() {
+	if cfg.DownloadCfg.CoversDir == "" {
+		// Covers are only staged here on the way into the audio file, so they belong
+		// in temp rather than in the user's music library.
+		cfg.DownloadCfg.CoversDir = filepath.Join(os.TempDir(), "explo-covers")
+	}
+
+	dl := &cfg.DownloadCfg
+
+	dl.Youtube.PathTemplate = dl.PathTemplate
+	dl.Youtube.CoversDir = dl.CoversDir
+	dl.Youtube.EmbedCoverArt = dl.EmbedCoverArt
+
+	dl.Qobuz.PathTemplate = dl.PathTemplate
+	dl.Qobuz.CoversDir = dl.CoversDir
+	dl.Qobuz.EmbedCoverArt = dl.EmbedCoverArt
 }
 
 func (cfg *Config) NormalizeDir() {

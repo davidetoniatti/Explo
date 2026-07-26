@@ -10,8 +10,6 @@ import (
 
 	"explo/src/models"
 	"explo/src/util"
-
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 // qobuzQualityID maps a configured quality string (env value or Qobuz numeric format_id
@@ -62,12 +60,22 @@ func pickBestQobuzTrack(track *models.Track, items []QobuzTrack, filterList []st
 	return nil
 }
 
-// saveStreamWithMetadata downloads downloadURL to a temp file in downloadDir, then uses
-// ffmpeg to copy the audio stream and write id3/vorbis metadata to track.File. If ffmpeg
-// fails, the temp file is moved into place as-is rather than lost. Shared by the native
-// qobuz and squidwtf-qobuz downloaders. ffmpegPath may be empty to use PATH, service is
-// used only for log context.
-func saveStreamWithMetadata(httpClient *util.HttpClient, downloadDir, downloadURL, ffmpegPath string, track *models.Track, service string) error {
+// saveOptions carries the output settings shared by the qobuz downloaders.
+type saveOptions struct {
+	DownloadDir   string
+	FfmpegPath    string // empty to look ffmpeg up on PATH
+	PathTemplate  string
+	CoversDir     string
+	EmbedCoverArt bool
+	Service       string // log context only
+}
+
+// saveStreamWithMetadata downloads downloadURL to a temp file, then uses ffmpeg to copy
+// the audio stream and write id3/vorbis metadata to the destination. If ffmpeg fails,
+// the temp file is moved into place as-is rather than lost. Shared by the native qobuz
+// and squidwtf-qobuz downloaders.
+func saveStreamWithMetadata(httpClient *util.HttpClient, downloadURL string, track *models.Track, opts saveOptions) error {
+	downloadDir, service := opts.DownloadDir, opts.Service
 	stream, err := httpClient.GetStream(downloadURL, nil)
 	if err != nil {
 		return err
@@ -92,17 +100,29 @@ func saveStreamWithMetadata(httpClient *util.HttpClient, downloadDir, downloadUR
 	}
 
 	destPath := filepath.Join(downloadDir, track.File)
-
-	// Use ffmpeg to write metadata
-	opts := ffmpeg.KwArgs{
-		"map":      "0:a",
-		"c:a":      "copy",
-		"metadata": util.BuildffmpegMetadata(*track),
-		"loglevel": "error",
+	if opts.PathTemplate != "" {
+		relPath, terr := buildTrackPath(opts.PathTemplate, track)
+		if terr != nil {
+			slog.Warn("ignoring path template, writing to the download directory", "service", service, "context", terr.Error())
+		} else {
+			destPath = filepath.Join(downloadDir, relPath)
+			track.File = filepath.Base(relPath)
+			track.RelPath = relPath
+		}
 	}
-	streams := []*ffmpeg.Stream{ffmpeg.Input(tempFile)}
 
-	if err = util.WriteMetadata(streams, ffmpegPath, destPath, opts); err != nil {
+	if err = os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		if rerr := os.Remove(tempFile); rerr != nil {
+			slog.Warn("failed to remove temp file", "service", service, "context", rerr.Error())
+		}
+		return fmt.Errorf("couldn't make download directory: %w", err)
+	}
+
+	// Qobuz already delivers the target format, so the audio is copied untouched.
+	coverPath := resolveCover(httpClient, track, destPath, opts.CoversDir, opts.EmbedCoverArt)
+	streams, ffOpts := buildAudioOutput(tempFile, coverPath, track, true)
+
+	if err = util.WriteMetadata(streams, opts.FfmpegPath, destPath, ffOpts); err != nil {
 		slog.Error("saving track failed", "service", service, "context", err.Error())
 		// If ffmpeg fails, try to at least move the original file so it's not lost
 		if rerr := os.Rename(tempFile, destPath); rerr != nil {

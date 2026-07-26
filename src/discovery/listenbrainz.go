@@ -197,13 +197,24 @@ type TopRecordings struct {
 
 type ListenBrainz struct {
 	HttpClient *util.HttpClient
+	Headers    map[string]string
 	cfg        cfg.Listenbrainz
 	Separator  string
 }
 
 func NewListenBrainz(cfg cfg.DiscoveryConfig, httpClient *util.HttpClient) *ListenBrainz {
+	// A user token authenticates the request, which raises the rate limit and is
+	// required for anything reading a user's private data.
+	var headers map[string]string
+	if cfg.Listenbrainz.UserToken != "" {
+		headers = map[string]string{
+			"Authorization": fmt.Sprintf("Token %s", cfg.Listenbrainz.UserToken),
+		}
+	}
+
 	return &ListenBrainz{
 		cfg:        cfg.Listenbrainz,
+		Headers:    headers,
 		HttpClient: httpClient,
 	}
 }
@@ -836,7 +847,7 @@ func topTags(tags []LBTag, limit int) []string {
 func (c *ListenBrainz) lbRequest(path string) ([]byte, error) {
 
 	reqURL := fmt.Sprintf("https://api.listenbrainz.org/1/%s", path)
-	body, err := c.HttpClient.MakeRequest("GET", reqURL, nil, nil)
+	body, err := c.HttpClient.MakeRequest("GET", reqURL, nil, c.Headers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request to ListenBrainz API: %s", err)
 	}

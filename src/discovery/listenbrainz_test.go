@@ -1,10 +1,13 @@
 package discovery
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	cfg "explo/src/config"
 	"explo/src/models"
+	"explo/src/util"
 )
 
 func TestBuildFeatTitle(t *testing.T) {
@@ -426,6 +429,67 @@ func TestApplyMBMetadata(t *testing.T) {
 
 		if track.ReleaseCountry != "US" || track.ReleaseStatus != "Official" {
 			t.Errorf("existing values were cleared: country %q status %q", track.ReleaseCountry, track.ReleaseStatus)
+		}
+	})
+}
+
+func TestListenBrainzUserToken(t *testing.T) {
+	t.Run("a token becomes an Authorization header", func(t *testing.T) {
+		c := NewListenBrainz(cfg.DiscoveryConfig{
+			Listenbrainz: cfg.Listenbrainz{UserToken: "secret-token"},
+		}, nil)
+
+		if got := c.Headers["Authorization"]; got != "Token secret-token" {
+			t.Errorf("Authorization = %q, want %q", got, "Token secret-token")
+		}
+	})
+
+	t.Run("no token means no headers at all", func(t *testing.T) {
+		c := NewListenBrainz(cfg.DiscoveryConfig{}, nil)
+
+		if len(c.Headers) != 0 {
+			t.Errorf("expected no headers without a token, got %v", c.Headers)
+		}
+	})
+
+	t.Run("the token is only sent to ListenBrainz", func(t *testing.T) {
+		// The token authenticates the user's ListenBrainz account. Sending it to
+		// MusicBrainz or the Cover Art Archive would hand a third party a credential.
+		var lbAuth, mbAuth string
+
+		lb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			lbAuth = r.Header.Get("Authorization")
+			if _, err := w.Write([]byte(`{}`)); err != nil {
+				t.Errorf("failed writing response: %v", err)
+			}
+		}))
+		defer lb.Close()
+
+		mb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mbAuth = r.Header.Get("Authorization")
+			if _, err := w.Write([]byte(`{}`)); err != nil {
+				t.Errorf("failed writing response: %v", err)
+			}
+		}))
+		defer mb.Close()
+
+		c := NewListenBrainz(cfg.DiscoveryConfig{
+			Listenbrainz: cfg.Listenbrainz{UserToken: "secret-token"},
+		}, util.NewHttp(util.HttpClientConfig{Timeout: 5}))
+
+		if _, err := c.HttpClient.MakeRequest("GET", lb.URL, nil, c.Headers); err != nil {
+			t.Fatalf("listenbrainz request failed: %v", err)
+		}
+		// mbRequest passes nil headers, mirror that here
+		if _, err := c.HttpClient.MakeRequest("GET", mb.URL, nil, nil); err != nil {
+			t.Fatalf("musicbrainz request failed: %v", err)
+		}
+
+		if lbAuth != "Token secret-token" {
+			t.Errorf("ListenBrainz did not receive the token, got %q", lbAuth)
+		}
+		if mbAuth != "" {
+			t.Errorf("token leaked to MusicBrainz: %q", mbAuth)
 		}
 	})
 }

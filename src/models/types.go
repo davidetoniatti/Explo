@@ -14,6 +14,7 @@ type Track struct {
 	CleanTitle   string // Title as returned by LB
 	Title        string // Title as built in listenbrainz.go
 	File         string // File name
+	RelPath      string // Path below the download dir, set when PATH_TEMPLATE organises downloads into folders
 	Size         int    // File size
 	Present      bool   // is track present in the system or not
 	Duration     int    // Track duration in milliseconds (not available for every track)

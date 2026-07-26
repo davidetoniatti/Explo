@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -152,4 +153,61 @@ func TestFixBaseURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestShareDownloadSettings(t *testing.T) {
+	t.Run("output settings reach every downloader", func(t *testing.T) {
+		// The downloader constructors only receive their own sub-struct, so anything
+		// configured once at the top level has to be copied down or it silently
+		// arrives empty.
+		cfg := &Config{}
+		cfg.DownloadCfg.PathTemplate = "{{Artist}}/{{TrackName}}.{{ext}}"
+		cfg.DownloadCfg.EmbedCoverArt = true
+		cfg.DownloadCfg.CoversDir = "/tmp/covers"
+
+		cfg.shareDownloadSettings()
+
+		for name, got := range map[string]struct {
+			pathTemplate  string
+			coversDir     string
+			embedCoverArt bool
+		}{
+			"youtube": {cfg.DownloadCfg.Youtube.PathTemplate, cfg.DownloadCfg.Youtube.CoversDir, cfg.DownloadCfg.Youtube.EmbedCoverArt},
+			"qobuz":   {cfg.DownloadCfg.Qobuz.PathTemplate, cfg.DownloadCfg.Qobuz.CoversDir, cfg.DownloadCfg.Qobuz.EmbedCoverArt},
+		} {
+			if got.pathTemplate != "{{Artist}}/{{TrackName}}.{{ext}}" {
+				t.Errorf("%s: PathTemplate = %q", name, got.pathTemplate)
+			}
+			if got.coversDir != "/tmp/covers" {
+				t.Errorf("%s: CoversDir = %q", name, got.coversDir)
+			}
+			if !got.embedCoverArt {
+				t.Errorf("%s: EmbedCoverArt was not propagated", name)
+			}
+		}
+	})
+
+	t.Run("an unset covers dir defaults under the temp dir", func(t *testing.T) {
+		cfg := &Config{}
+
+		cfg.shareDownloadSettings()
+
+		if cfg.DownloadCfg.CoversDir == "" {
+			t.Fatal("expected a default covers directory")
+		}
+		if !strings.HasPrefix(cfg.DownloadCfg.CoversDir, os.TempDir()) {
+			t.Errorf("covers dir should live under the temp dir, got %q", cfg.DownloadCfg.CoversDir)
+		}
+	})
+
+	t.Run("a configured covers dir is respected", func(t *testing.T) {
+		cfg := &Config{}
+		cfg.DownloadCfg.CoversDir = "/custom/covers"
+
+		cfg.shareDownloadSettings()
+
+		if cfg.DownloadCfg.CoversDir != "/custom/covers" {
+			t.Errorf("CoversDir = %q, want /custom/covers", cfg.DownloadCfg.CoversDir)
+		}
+	})
 }
