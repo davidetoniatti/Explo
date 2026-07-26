@@ -13,7 +13,7 @@ func TestConfig_ReadEnv(t *testing.T) {
 	os.Setenv("SYSTEM_URL", "http://localhost:8096")
 	os.Setenv("API_KEY", "test-api-key")
 	os.Setenv("DOWNLOAD_DIR", "/tmp/explo")
-	
+
 	defer func() {
 		os.Unsetenv("EXPLO_SYSTEM")
 		os.Unsetenv("SYSTEM_URL")
