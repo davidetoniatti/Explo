@@ -24,7 +24,9 @@ func TestGetStream_OutlivesAPITimeout(t *testing.T) {
 		// stream slower than the configured API timeout, but well within the download client's bounds
 		for i := 0; i < 3; i++ {
 			time.Sleep(time.Duration(apiTimeoutSeconds) * time.Second)
-			w.Write([]byte("chunk"))
+			if _, err := w.Write([]byte("chunk")); err != nil {
+				t.Errorf("failed writing test response: %v", err)
+			}
 			if flusher != nil {
 				flusher.Flush()
 			}
@@ -55,8 +57,10 @@ func TestCoverFilename(t *testing.T) {
 	t.Run("is stable for the same url", func(t *testing.T) {
 		url := "https://coverartarchive.org/release/abc-123/front-250"
 
-		if coverFilename(url) != coverFilename(url) {
-			t.Error("expected the same url to map to the same cache file")
+		first, second := coverFilename(url), coverFilename(url)
+
+		if first != second {
+			t.Errorf("expected the same url to map to the same cache file, got %q and %q", first, second)
 		}
 	})
 

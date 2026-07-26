@@ -12,18 +12,11 @@ import (
 )
 
 func TestConfig_ReadEnv(t *testing.T) {
-	// Setup environment variables
-	os.Setenv("EXPLO_SYSTEM", "emby")
-	os.Setenv("SYSTEM_URL", "http://localhost:8096")
-	os.Setenv("API_KEY", "test-api-key")
-	os.Setenv("DOWNLOAD_DIR", "/tmp/explo")
-
-	defer func() {
-		os.Unsetenv("EXPLO_SYSTEM")
-		os.Unsetenv("SYSTEM_URL")
-		os.Unsetenv("API_KEY")
-		os.Unsetenv("DOWNLOAD_DIR")
-	}()
+	// Setup environment variables, unset again by t.Setenv when the test ends
+	t.Setenv("EXPLO_SYSTEM", "emby")
+	t.Setenv("SYSTEM_URL", "http://localhost:8096")
+	t.Setenv("API_KEY", "test-api-key")
+	t.Setenv("DOWNLOAD_DIR", "/tmp/explo")
 
 	cfg := &Config{}
 	cfg.ReadEnv()
@@ -331,9 +324,15 @@ func TestReplacePlaylistFromEnvFile(t *testing.T) {
 	if err := os.WriteFile(envFile, []byte("EXPLO_SYSTEM=emby\nPERSIST=false\n"), 0644); err != nil {
 		t.Fatalf("failed to write test .env: %v", err)
 	}
+	// cleanenv exports the file into the real environment, so it has to be cleaned up
+	// here rather than through t.Setenv, which would supply the variable itself and
+	// defeat what this test is checking.
 	t.Cleanup(func() {
-		os.Unsetenv("EXPLO_SYSTEM")
-		os.Unsetenv("PERSIST")
+		for _, key := range []string{"EXPLO_SYSTEM", "PERSIST"} {
+			if err := os.Unsetenv(key); err != nil {
+				t.Errorf("failed to unset %s: %v", key, err)
+			}
+		}
 	})
 
 	cfg := &Config{}
