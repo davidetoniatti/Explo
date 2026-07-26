@@ -27,6 +27,16 @@ type FailedResp struct {
 	} `json:"subsonic-response"`
 }
 
+type SubsonicSong struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Artist        string `json:"artist"`
+	Album         string `json:"album"`
+	Duration      int    `json:"duration"`
+	MusicBrainzID string `json:"musicBrainzId"`
+	Path          string `json:"path"`
+}
+
 type SubResponse struct {
 	SubsonicResponse struct {
 		Status        string `json:"status"`
@@ -34,13 +44,7 @@ type SubResponse struct {
 		Type          string `json:"type"`
 		ServerVersion string `json:"serverVersion"`
 		SearchResult3 struct {
-			Song []struct {
-				ID       string `json:"id"`
-				Title    string `json:"title"`
-				Artist   string `json:"artist"`
-				Duration int    `json:"duration"`
-				Path     string `json:"path"`
-			} `json:"song"`
+			Song []SubsonicSong `json:"song"`
 		} `json:"searchResult3,omitempty"`
 		Playlists struct {
 			Playlist []Playlist `json:"playlist,omitempty"`
@@ -124,38 +128,38 @@ func (c *Subsonic) AddLibrary() error {
 
 func (c *Subsonic) SearchSongs(tracks []*models.Track) error {
 	for _, track := range tracks {
-		searchQuery := fmt.Sprintf("%s %s", track.CleanTitle, track.MainArtist)
-		reqParam := fmt.Sprintf("search3?query=%s&f=json", url.QueryEscape(searchQuery))
+		searchQuery := fmt.Sprintf("%s %s", util.CleanSearchTitle(track.CleanTitle), track.MainArtist)
 
-		body, err := c.subsonicRequest(reqParam)
+		songs, err := c.searchSongs(searchQuery)
 		if err != nil {
 			return err
 		}
 
-		var resp SubResponse
-		if err := util.ParseResp(body, &resp); err != nil {
-			return err
+		// Servers index the MusicBrainz id, so it finds tracks whose title or artist
+		// is spelled differently locally than on ListenBrainz.
+		if len(songs) == 0 && track.MusicBrainzTrackID != "" {
+			slog.Debug("[subsonic] no results by title, retrying with the MusicBrainz id", "mbid", track.MusicBrainzTrackID)
+			if songs, err = c.searchSongs(track.MusicBrainzTrackID); err != nil {
+				return err
+			}
 		}
 
-		songs := resp.SubsonicResponse.SearchResult3.Song
 		if len(songs) == 0 {
 			slog.Debug(fmt.Sprintf("[subsonic] no results found for %s", searchQuery))
 			continue
 		}
 
+		normalizedTitles := trackTitles(track)
 		for _, song := range songs {
-			artistMatch := strings.Contains(strings.ToLower(song.Artist), strings.ToLower(track.MainArtist))
-			titleMatch := strings.EqualFold(song.Title, track.Title) || strings.EqualFold(song.Title, track.CleanTitle)
-			durationMatch := util.Abs(song.Duration-(track.Duration/1000)) < 10
-			pathMatch := strings.Contains(strings.ToLower(song.Path), strings.ToLower(track.File))
-
-			if artistMatch && titleMatch {
-				track.ID = song.ID
-				track.Present = true
-				break
-			}
-
-			if track.File != "" && durationMatch && pathMatch {
+			if matchesTrack(track, normalizedTitles, libraryItem{
+				Title:   song.Title,
+				Album:   song.Album,
+				Artists: []string{song.Artist},
+				Path:    song.Path,
+				// search3 reports seconds, matching works in milliseconds
+				Duration:       song.Duration * 1000,
+				MusicBrainzIDs: []string{song.MusicBrainzID},
+			}) {
 				track.ID = song.ID
 				track.Present = true
 				break
@@ -167,6 +171,23 @@ func (c *Subsonic) SearchSongs(tracks []*models.Track) error {
 		}
 	}
 	return nil
+}
+
+// searchSongs runs a single search3 query and returns the songs it matched.
+func (c *Subsonic) searchSongs(query string) ([]SubsonicSong, error) {
+	reqParam := fmt.Sprintf("search3?query=%s&f=json", url.QueryEscape(query))
+
+	body, err := c.subsonicRequest(reqParam)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp SubResponse
+	if err := util.ParseResp(body, &resp); err != nil {
+		return nil, err
+	}
+
+	return resp.SubsonicResponse.SearchResult3.Song, nil
 }
 
 func (c *Subsonic) RefreshLibrary() error {

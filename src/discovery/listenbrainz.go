@@ -257,8 +257,9 @@ func (c *ListenBrainz) queryPlaylistTracks() ([]*models.Track, error) {
 	}
 }
 
-// buildFeatTitle appends the featured artists to a title. featArtists must not
-// include the main artist.
+// buildFeatTitle appends the featured artists to a title, in the parenthesised form
+// music libraries and tagging tools use: "Song (feat. A, B & C)". featArtists must
+// not include the main artist.
 func buildFeatTitle(cleanTitle string, featArtists []string) string {
 	if len(featArtists) == 0 {
 		return cleanTitle
@@ -266,8 +267,17 @@ func buildFeatTitle(cleanTitle string, featArtists []string) string {
 
 	var b strings.Builder
 	b.WriteString(cleanTitle)
-	b.WriteString(" feat. ")
-	b.WriteString(strings.Join(featArtists, ", "))
+	b.WriteString(" (feat. ")
+
+	if len(featArtists) == 1 {
+		b.WriteString(featArtists[0])
+	} else {
+		b.WriteString(strings.Join(featArtists[:len(featArtists)-1], ", "))
+		b.WriteString(" & ")
+		b.WriteString(featArtists[len(featArtists)-1])
+	}
+
+	b.WriteString(")")
 
 	return b.String()
 }

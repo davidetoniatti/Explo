@@ -49,37 +49,43 @@ type PlexSearch struct {
 	MediaContainer struct {
 		Size         int `json:"size"`
 		SearchResult []struct {
-			Score    float64 `json:"score"`
-			Metadata struct {
-				LibrarySectionTitle string `json:"librarySectionTitle"`
-				RatingKey           string `json:"ratingKey"`
-				Key                 string `json:"key"`
-				Type                string `json:"type"`
-				Title               string `json:"title"`            // Track
-				GrandparentTitle    string `json:"grandparentTitle"` // Artist
-				ParentTitle         string `json:"parentTitle"`      // Album
-				OriginalTitle       string `json:"originalTitle"`
-				Summary             string `json:"summary"`
-				Duration            int    `json:"duration"`
-				AddedAt             int    `json:"addedAt"`
-				UpdatedAt           int    `json:"updatedAt"`
-				Media               []struct {
-					ID       int `json:"id"`
-					Duration int `json:"duration"`
-					Part     []struct {
-						ID       int    `json:"id"`
-						Key      string `json:"key"`
-						Duration int    `json:"duration"`
-						File     string `json:"file"`
-						Size     int    `json:"size"`
-					} `json:"Part"`
-					AudioChannels int    `json:"audioChannels"`
-					AudioCodec    string `json:"audioCodec"`
-					Container     string `json:"container"`
-				} `json:"Media"`
-			} `json:"Metadata"`
+			Score    float64      `json:"score"`
+			Metadata SongMetadata `json:"Metadata"`
 		} `json:"SearchResult"`
 	} `json:"MediaContainer"`
+}
+
+type SongMetadata struct {
+	LibrarySectionTitle string      `json:"librarySectionTitle"`
+	RatingKey           string      `json:"ratingKey"`
+	Key                 string      `json:"key"`
+	Type                string      `json:"type"`
+	Title               string      `json:"title"`            // Track
+	GrandparentTitle    string      `json:"grandparentTitle"` // Artist
+	ParentTitle         string      `json:"parentTitle"`      // Album
+	OriginalTitle       string      `json:"originalTitle"`
+	Summary             string      `json:"summary"`
+	Duration            int         `json:"duration"`
+	AddedAt             int         `json:"addedAt"`
+	UpdatedAt           int         `json:"updatedAt"`
+	Media               []PlexMedia `json:"Media"`
+}
+
+type PlexMedia struct {
+	ID            int        `json:"id"`
+	Duration      int        `json:"duration"`
+	Part          []PlexPart `json:"Part"`
+	AudioChannels int        `json:"audioChannels"`
+	AudioCodec    string     `json:"audioCodec"`
+	Container     string     `json:"container"`
+}
+
+type PlexPart struct {
+	ID       int    `json:"id"`
+	Key      string `json:"key"`
+	Duration int    `json:"duration"`
+	File     string `json:"file"`
+	Size     int    `json:"size"`
 }
 
 type PlexServer struct {
@@ -262,7 +268,7 @@ func (c *Plex) SearchSongs(tracks []*models.Track) error {
 			slog.Warn("failed to parse response", "track", track.Title, "error", err.Error())
 			continue
 		}
-		key, err := getPlexSong(track, searchResults)
+		key, err := c.getPlexSong(track, searchResults)
 		if err != nil {
 			slog.Debug(err.Error())
 			continue
@@ -353,40 +359,111 @@ func (c *Plex) getServer() error {
 	return nil
 }
 
-func getPlexSong(track *models.Track, searchResults PlexSearch) (string, error) {
-	loweredArtist := strings.ToLower(track.MainArtist)
+// PlexMetadata is the part of a library metadata response holding external ids.
+type PlexMetadata struct {
+	MediaContainer struct {
+		Metadata []struct {
+			GUID []struct {
+				ID string `json:"id"`
+			} `json:"Guid"`
+		} `json:"Metadata"`
+	} `json:"MediaContainer"`
+}
 
+// plexMBIDLookupLimit bounds how many candidates per track get a metadata lookup.
+// Plex omits the MusicBrainz id from search results, so each one costs a request, and
+// a track that is genuinely missing from the library would otherwise pay for every
+// result the search returned.
+const plexMBIDLookupLimit = 5
+
+func (c *Plex) getPlexSong(track *models.Track, searchResults PlexSearch) (string, error) {
+	normalizedTitles := trackTitles(track)
+
+	candidates := make([]SongMetadata, 0, len(searchResults.MediaContainer.SearchResult))
 	for _, result := range searchResults.MediaContainer.SearchResult {
-		md := result.Metadata
-		if md.Type != "track" {
-			continue
+		if result.Metadata.Type == "track" {
+			candidates = append(candidates, result.Metadata)
 		}
+	}
 
-		titleMatch := strings.EqualFold(md.Title, track.Title) || strings.EqualFold(md.Title, track.CleanTitle)
-		albumMatch := strings.EqualFold(md.ParentTitle, track.Album)
-		artistMatch := strings.Contains(strings.ToLower(md.OriginalTitle), loweredArtist) || strings.Contains(strings.ToLower(md.GrandparentTitle), loweredArtist)
-
-		if titleMatch && (albumMatch || artistMatch) {
-			slog.Debug(fmt.Sprintf("matched track via metadata: %s by %s", track.Title, track.Artist))
+	// Everything that costs nothing goes first, over all candidates.
+	for _, md := range candidates {
+		if matchesTrack(track, normalizedTitles, plexLibraryItem(md)) {
+			slog.Debug("matched track via metadata", "title", track.Title, "artist", track.Artist)
 			return md.Key, nil
 		}
+	}
 
-		if track.File == "" || len(md.Media) == 0 || len(md.Media[0].Part) == 0 {
-			continue
-		}
-
-		media := md.Media[0]
-		pathMatch := strings.Contains(strings.ToLower(media.Part[0].File), strings.ToLower(track.File))
-		durationMatch := util.Abs(media.Duration-track.Duration) < 10000 // duration within 10s
-
-		if durationMatch && pathMatch {
-			slog.Debug(fmt.Sprintf("matched track via path: %s by %s", track.Title, track.Artist))
-			return md.Key, nil
+	// Only once nothing matched locally is it worth asking Plex for MusicBrainz ids.
+	if track.MusicBrainzTrackID != "" || track.MusicBrainzReleaseTrackID != "" {
+		for i, md := range candidates {
+			if i >= plexMBIDLookupLimit {
+				slog.Debug("[plex] stopped checking MusicBrainz ids", "checked", i, "candidates", len(candidates))
+				break
+			}
+			if musicBrainzMatch(track, c.songMBID(md.RatingKey)) {
+				slog.Debug("matched track via MusicBrainz id", "title", track.Title, "artist", track.Artist)
+				return md.Key, nil
+			}
 		}
 	}
 
 	slog.Debug(fmt.Sprintf("full search result: %v", searchResults.MediaContainer.SearchResult))
 	return "", fmt.Errorf("failed to find '%s' by '%s' in '%s'", track.Title, track.Artist, track.Album)
+}
+
+func plexLibraryItem(md SongMetadata) libraryItem {
+	item := libraryItem{
+		Title:       md.Title,
+		Album:       md.ParentTitle,
+		AlbumArtist: md.GrandparentTitle,
+		Artists:     []string{md.OriginalTitle, md.GrandparentTitle},
+	}
+	if len(md.Media) > 0 {
+		item.Duration = md.Media[0].Duration
+		if len(md.Media[0].Part) > 0 {
+			item.Path = md.Media[0].Part[0].File
+		}
+	}
+	return item
+}
+
+// songMBID reads the MusicBrainz id Plex holds for a track. Returns "" when Plex has
+// none, which is normal for libraries scanned with the legacy music agent.
+func (c *Plex) songMBID(ratingKey string) string {
+	if ratingKey == "" {
+		return ""
+	}
+
+	if c.HttpClient == nil {
+		return ""
+	}
+
+	// Without includeGuids Plex omits the external ids entirely, and this returns ""
+	// for every track with no error to show why.
+	params := fmt.Sprintf("/library/metadata/%s?includeGuids=1", ratingKey)
+
+	body, err := c.HttpClient.MakeRequest("GET", c.Cfg.URL+params, nil, c.Cfg.Creds.Headers)
+	if err != nil {
+		slog.Debug("[plex] failed to read track metadata", "ratingKey", ratingKey, "context", err.Error())
+		return ""
+	}
+
+	var meta PlexMetadata
+	if err := util.ParseResp(body, &meta); err != nil {
+		return ""
+	}
+
+	const prefix = "mbid://"
+	for _, item := range meta.MediaContainer.Metadata {
+		for _, guid := range item.GUID {
+			if strings.HasPrefix(guid.ID, prefix) {
+				return strings.TrimPrefix(guid.ID, prefix)
+			}
+		}
+	}
+
+	return ""
 }
 
 func (c *Plex) addtoPlaylist(tracks []*models.Track) {
