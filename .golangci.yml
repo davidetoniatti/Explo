@@ -15,7 +15,6 @@ linters:
   settings:
     sloglint:
       # slog is not printf: forbid passing extra positional args to a message string
-      # (this is exactly the class of bug fixed in task 1.5 - see plex.go history).
       no-mixed-args: true
     errcheck:
       # Checking the error from a deferred Close() on an HTTP response body / stream

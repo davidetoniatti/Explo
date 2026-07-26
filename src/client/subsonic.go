@@ -19,33 +19,37 @@ import (
 
 type FailedResp struct {
 	SubsonicResponse struct {
-		Status        string `json:"status"`
-		Error         struct {
+		Status string `json:"status"`
+		Error  struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
 	} `json:"subsonic-response"`
 }
 
+type SubsonicSong struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Artist        string `json:"artist"`
+	Album         string `json:"album"`
+	Duration      int    `json:"duration"`
+	MusicBrainzID string `json:"musicBrainzId"`
+	Path          string `json:"path"`
+}
+
 type SubResponse struct {
 	SubsonicResponse struct {
-		Status        string        `json:"status"`
-		Version       string        `json:"version"`
-		Type          string        `json:"type"`
-		ServerVersion string        `json:"serverVersion"`
+		Status        string `json:"status"`
+		Version       string `json:"version"`
+		Type          string `json:"type"`
+		ServerVersion string `json:"serverVersion"`
 		SearchResult3 struct {
-			Song []struct {
-				ID          string    `json:"id"`
-				Title       string    `json:"title"`
-				Artist        string    `json:"artist"`
-				Duration      int       `json:"duration"`
-				Path          string    `json:"path"`
-			} `json:"song"`
+			Song []SubsonicSong `json:"song"`
 		} `json:"searchResult3,omitempty"`
-		Playlists     struct {
+		Playlists struct {
 			Playlist []Playlist `json:"playlist,omitempty"`
 		} `json:"playlists,omitempty"`
-		Playlist      Playlist `json:"playlist,omitempty"`
+		Playlist Playlist `json:"playlist,omitempty"`
 	} `json:"subsonic-response"`
 }
 
@@ -81,10 +85,10 @@ type ScanState struct {
 }
 
 type Subsonic struct {
-	Token string
-	Salt string
+	Token      string
+	Salt       string
 	HttpClient *util.HttpClient
-	Cfg config.ClientConfig
+	Cfg        config.ClientConfig
 }
 
 func NewSubsonic(cfg config.ClientConfig, httpClient *util.HttpClient) *Subsonic {
@@ -98,7 +102,6 @@ func (c *Subsonic) AddHeader() error {
 
 func (c *Subsonic) GetAuth() error { // Generate salt and token
 	var salt = make([]byte, 6)
-
 
 	_, err := rand.Read(salt)
 	if err != nil {
@@ -125,38 +128,38 @@ func (c *Subsonic) AddLibrary() error {
 
 func (c *Subsonic) SearchSongs(tracks []*models.Track) error {
 	for _, track := range tracks {
-		searchQuery := fmt.Sprintf("%s %s", track.CleanTitle, track.MainArtist)
-		reqParam := fmt.Sprintf("search3?query=%s&f=json", url.QueryEscape(searchQuery))
+		searchQuery := fmt.Sprintf("%s %s", util.CleanSearchTitle(track.CleanTitle), track.MainArtist)
 
-		body, err := c.subsonicRequest(reqParam)
+		songs, err := c.searchSongs(searchQuery)
 		if err != nil {
 			return err
 		}
 
-		var resp SubResponse
-		if err := util.ParseResp(body, &resp); err != nil {
-			return err
+		// Servers index the MusicBrainz id, so it finds tracks whose title or artist
+		// is spelled differently locally than on ListenBrainz.
+		if len(songs) == 0 && track.MusicBrainzTrackID != "" {
+			slog.Debug("[subsonic] no results by title, retrying with the MusicBrainz id", "mbid", track.MusicBrainzTrackID)
+			if songs, err = c.searchSongs(track.MusicBrainzTrackID); err != nil {
+				return err
+			}
 		}
 
-		songs := resp.SubsonicResponse.SearchResult3.Song
 		if len(songs) == 0 {
 			slog.Debug(fmt.Sprintf("[subsonic] no results found for %s", searchQuery))
 			continue
 		}
 
+		normalizedTitles := trackTitles(track)
 		for _, song := range songs {
-			artistMatch := strings.Contains(strings.ToLower(song.Artist), strings.ToLower(track.MainArtist))
-			titleMatch := strings.EqualFold(song.Title, track.Title) || strings.EqualFold(song.Title, track.CleanTitle)
-			durationMatch := util.Abs(song.Duration - (track.Duration / 1000)) < 10
-			pathMatch := strings.Contains(strings.ToLower(song.Path), strings.ToLower(track.File))
-
-			if artistMatch && titleMatch {
-				track.ID = song.ID
-				track.Present = true
-				break
-			}
-
-			if track.File != "" && durationMatch && pathMatch {
+			if matchesTrack(track, normalizedTitles, libraryItem{
+				Title:   song.Title,
+				Album:   song.Album,
+				Artists: []string{song.Artist},
+				Path:    song.Path,
+				// search3 reports seconds, matching works in milliseconds
+				Duration:       song.Duration * 1000,
+				MusicBrainzIDs: []string{song.MusicBrainzID},
+			}) {
 				track.ID = song.ID
 				track.Present = true
 				break
@@ -168,6 +171,23 @@ func (c *Subsonic) SearchSongs(tracks []*models.Track) error {
 		}
 	}
 	return nil
+}
+
+// searchSongs runs a single search3 query and returns the songs it matched.
+func (c *Subsonic) searchSongs(query string) ([]SubsonicSong, error) {
+	reqParam := fmt.Sprintf("search3?query=%s&f=json", url.QueryEscape(query))
+
+	body, err := c.subsonicRequest(reqParam)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp SubResponse
+	if err := util.ParseResp(body, &resp); err != nil {
+		return nil, err
+	}
+
+	return resp.SubsonicResponse.SearchResult3.Song, nil
 }
 
 func (c *Subsonic) RefreshLibrary() error {
@@ -233,9 +253,9 @@ func (c *Subsonic) CreatePlaylist(tracks []*models.Track) error {
 
 	var resp SubResponse
 	if err := util.ParseResp(body, &resp); err != nil {
-        return err
-    }
-	
+		return err
+	}
+
 	c.Cfg.PlaylistID = resp.SubsonicResponse.Playlist.ID
 	return nil
 }
@@ -250,8 +270,8 @@ func (c *Subsonic) SearchPlaylist() error {
 
 	var resp SubResponse
 	if err := util.ParseResp(body, &resp); err != nil {
-        return err
-    }
+		return err
+	}
 
 	for _, playlist := range resp.SubsonicResponse.Playlists.Playlist {
 		if playlist.Name == c.Cfg.PlaylistName {
@@ -264,7 +284,7 @@ func (c *Subsonic) SearchPlaylist() error {
 }
 
 func (c *Subsonic) UpdatePlaylist() error {
-	reqParam := fmt.Sprintf("updatePlaylist?playlistId=%s&comment=%s&f=json&public=%t",c.Cfg.PlaylistID, url.QueryEscape(c.Cfg.PlaylistDescr), c.Cfg.Subsonic.PublicPlaylist)
+	reqParam := fmt.Sprintf("updatePlaylist?playlistId=%s&comment=%s&f=json&public=%t", c.Cfg.PlaylistID, url.QueryEscape(c.Cfg.PlaylistDescr), c.Cfg.Subsonic.PublicPlaylist)
 
 	if _, err := c.subsonicRequest(reqParam); err != nil {
 		return err
@@ -283,7 +303,7 @@ func (c *Subsonic) DeletePlaylist() error {
 
 func (c *Subsonic) subsonicRequest(reqParams string) ([]byte, error) {
 
-	reqURL := fmt.Sprintf("%s/rest/%s&u=%s&t=%s&s=%s&v=%s&c=%s",c.Cfg.URL, reqParams, c.Cfg.Creds.User, c.Token, c.Salt, c.Cfg.Subsonic.Version, c.Cfg.ClientID)
+	reqURL := fmt.Sprintf("%s/rest/%s&u=%s&t=%s&s=%s&v=%s&c=%s", c.Cfg.URL, reqParams, c.Cfg.Creds.User, c.Token, c.Salt, c.Cfg.Subsonic.Version, c.Cfg.ClientID)
 	body, err := c.HttpClient.MakeRequest("GET", reqURL, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request %s", err.Error())

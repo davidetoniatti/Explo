@@ -39,13 +39,15 @@ type Qobuz struct {
 	AppID       string
 	Secrets     []string
 	initMu      sync.Mutex
+	paths       *pathClaims
 }
 
-func NewQobuz(cfg config.Qobuz, downloadDir string, httpClient *util.HttpClient) *Qobuz {
+func NewQobuz(cfg config.Qobuz, downloadDir string, httpClient *util.HttpClient, paths *pathClaims) *Qobuz {
 	return &Qobuz{
 		HttpClient:  httpClient,
 		DownloadDir: downloadDir,
 		Cfg:         cfg,
+		paths:       paths,
 	}
 }
 
@@ -372,5 +374,13 @@ func (c *Qobuz) tryGetDownloadURL(trackID string, formatId int, secret string) (
 }
 
 func (c *Qobuz) downloadAndSave(downloadURL string, track *models.Track) error {
-	return saveStreamWithMetadata(c.HttpClient, c.DownloadDir, downloadURL, track, "qobuz")
+	return saveStreamWithMetadata(c.HttpClient, downloadURL, track, saveOptions{
+		DownloadDir:   c.DownloadDir,
+		FfmpegPath:    c.Cfg.FfmpegPath,
+		PathTemplate:  c.Cfg.PathTemplate,
+		CoversDir:     c.Cfg.CoversDir,
+		EmbedCoverArt: c.Cfg.EmbedCoverArt,
+		Paths:         c.paths,
+		Service:       "qobuz",
+	})
 }

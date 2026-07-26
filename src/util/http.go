@@ -1,12 +1,17 @@
 package util
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"explo/src/logging"
@@ -103,6 +108,77 @@ func (c *HttpClient) GetStream(url string, headers map[string]string) (io.ReadCl
 	}
 
 	return resp.Body, nil
+}
+
+// DownloadCover fetches coverURL into coversDir and returns the local path.
+// Images are cached under a name derived from the URL, so every track from the same
+// release reuses one download. An already cached file is returned untouched.
+func (c *HttpClient) DownloadCover(coverURL, coversDir string) (string, error) {
+	if coverURL == "" {
+		return "", fmt.Errorf("no cover art URL")
+	}
+	if coversDir == "" {
+		return "", fmt.Errorf("no covers directory configured")
+	}
+
+	destPath := filepath.Join(coversDir, coverFilename(coverURL))
+	// An empty cache entry would otherwise be handed to ffmpeg as a valid cover and
+	// fail every conversion that reuses it, for as long as the file survives.
+	if info, err := os.Stat(destPath); err == nil && info.Size() > 0 {
+		return destPath, nil
+	}
+
+	if err := os.MkdirAll(coversDir, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create covers directory: %w", err)
+	}
+
+	stream, err := c.GetStream(coverURL, nil)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cerr := stream.Close(); cerr != nil {
+			slog.Warn("cover stream close failed", "context", cerr.Error())
+		}
+	}()
+
+	// Write to a temp file first, so an interrupted download cannot be picked up as
+	// a valid cache entry by the next run.
+	tmp, err := os.CreateTemp(coversDir, "cover-*.part")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp cover file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	written, copyErr := io.Copy(tmp, stream)
+	closeErr := tmp.Close()
+
+	if copyErr == nil && closeErr == nil && written == 0 {
+		copyErr = fmt.Errorf("cover at %s was empty", coverURL)
+	}
+
+	if copyErr != nil || closeErr != nil {
+		if rerr := os.Remove(tmpName); rerr != nil {
+			slog.Warn("failed to remove temp cover file", "file", tmpName, "context", rerr.Error())
+		}
+		return "", errors.Join(copyErr, closeErr)
+	}
+
+	if err := os.Rename(tmpName, destPath); err != nil {
+		if rerr := os.Remove(tmpName); rerr != nil {
+			slog.Warn("failed to remove temp cover file", "file", tmpName, "context", rerr.Error())
+		}
+		return "", fmt.Errorf("failed to store cover: %w", err)
+	}
+
+	return destPath, nil
+}
+
+// coverFilename derives a cache file name from the cover URL. Hashing keeps the name
+// filesystem safe whatever the URL looks like, and rules out path traversal.
+func coverFilename(coverURL string) string {
+	sum := sha256.Sum256([]byte(coverURL))
+	return hex.EncodeToString(sum[:8]) + ".jpg"
 }
 
 func ParseResp[T any](body []byte, target *T) error {

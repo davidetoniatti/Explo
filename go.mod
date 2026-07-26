@@ -12,6 +12,7 @@ require (
 	github.com/wader/goutubedl v0.0.0-20250417150709-083444e4ab87
 	golang.org/x/sync v0.19.0
 	golang.org/x/text v0.32.0
+	golang.org/x/time v0.14.0
 	maunium.net/go/mautrix v0.26.0
 )
 

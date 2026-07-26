@@ -17,7 +17,6 @@ import (
 	"explo/src/models"
 	"explo/src/util"
 
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"github.com/wader/goutubedl"
 )
 
@@ -49,9 +48,10 @@ type Youtube struct {
 	HttpClient  *util.HttpClient
 	Cfg         cfg.Youtube
 	gouTubeOpts goutubedl.Options
+	paths       *pathClaims
 }
 
-func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util.HttpClient) *Youtube { // init downloader cfg for youtube
+func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util.HttpClient, paths *pathClaims) *Youtube { // init downloader cfg for youtube
 	// check for custom ytdlp options
 	if cfg.YtdlpPath != "" {
 		goutubedl.Path = cfg.YtdlpPath
@@ -66,7 +66,8 @@ func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util
 		DownloadDir: downloadDir,
 		Cfg:         cfg,
 		HttpClient:  httpClient,
-		gouTubeOpts: opts}
+		gouTubeOpts: opts,
+		paths:       paths}
 }
 
 func (c *Youtube) QueryTrack(track *models.Track) error { // Queries youtube for the song
@@ -143,7 +144,7 @@ func (c *Youtube) GetTrack(track *models.Track) error {
 	ctx := context.Background() // ctx for yt-dlp
 
 	track.File = fmt.Sprintf("%s.%s", getFilename(track.Title, track.Artist), c.Cfg.FileExtension)
-	track.Present = fetchAndSaveVideo(ctx, *c, *track)
+	track.Present = fetchAndSaveVideo(ctx, *c, track)
 
 	if track.Present {
 		slog.Info("download finished", "service", "youtube", "track", track.File)
@@ -185,7 +186,7 @@ func getVideo(ctx context.Context, c Youtube, videoID string) (*goutubedl.Downlo
 
 }
 
-func saveVideo(c Youtube, track models.Track, stream *goutubedl.DownloadResult) bool {
+func saveVideo(c Youtube, track *models.Track, stream *goutubedl.DownloadResult) bool {
 
 	defer func() {
 		if err := stream.Close(); err != nil {
@@ -193,7 +194,7 @@ func saveVideo(c Youtube, track models.Track, stream *goutubedl.DownloadResult) 
 		}
 	}()
 
-	input := filepath.Join(c.DownloadDir, track.File+".tmp")
+	input := c.paths.claim(filepath.Join(c.DownloadDir, track.File+".tmp"))
 	file, err := os.Create(input)
 	if err != nil {
 		slog.Error("failed to create song file", "context", err.Error())
@@ -214,17 +215,34 @@ func saveVideo(c Youtube, track models.Track, stream *goutubedl.DownloadResult) 
 		return false
 	}
 
-	cmd := ffmpeg.Input(input).Output(filepath.Join(c.DownloadDir, track.File), ffmpeg.KwArgs{
-		"map":      "0:a",
-		"metadata": []string{"artist=" + track.Artist, "title=" + track.Title, "album=" + track.Album},
-		"loglevel": "error",
-	}).OverWriteOutput().ErrorToStdOut()
-
-	if c.Cfg.FfmpegPath != "" {
-		cmd.SetFfmpegPath(c.Cfg.FfmpegPath)
+	outputPath := filepath.Join(c.DownloadDir, track.File)
+	if c.Cfg.PathTemplate != "" {
+		relPath, terr := buildTrackPath(c.Cfg.PathTemplate, track)
+		if terr != nil {
+			slog.Warn("ignoring path template, writing to the download directory", "context", terr.Error())
+		} else {
+			outputPath = filepath.Join(c.DownloadDir, relPath)
+			// the music system looks the track up by file name, so it has to follow
+			// the file to wherever the template put it
+			track.File = filepath.Base(relPath)
+			track.RelPath = relPath
+		}
 	}
 
-	if err = cmd.Run(); err != nil {
+	if err = os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		slog.Error("failed to create output directory", "context", err.Error())
+		if err = os.Remove(input); err != nil {
+			slog.Debug(fmt.Sprintf("failed to remove %s", input), logging.RuntimeAttr(err.Error()))
+		}
+		return false
+	}
+
+	coverPath := resolveCover(c.HttpClient, track, outputPath, c.Cfg.CoversDir, c.Cfg.EmbedCoverArt)
+	// yt-dlp hands back whatever the best audio stream is, which rarely matches the
+	// configured extension, so the audio has to be re-encoded rather than copied.
+	streams, opts := buildAudioOutput(input, coverPath, track, false)
+
+	if err = util.WriteMetadata(streams, c.Cfg.FfmpegPath, outputPath, opts); err != nil {
 		slog.Error("failed to convert audio", "context", err.Error())
 		if err = os.Remove(input); err != nil {
 			slog.Debug(fmt.Sprintf("failed to remove %s", input), logging.RuntimeAttr(err.Error()))
@@ -255,7 +273,7 @@ func (c *Youtube) gatherVideo(cfg cfg.Youtube, videos Videos, track models.Track
 	return ""
 }
 
-func fetchAndSaveVideo(ctx context.Context, cfg Youtube, track models.Track) bool {
+func fetchAndSaveVideo(ctx context.Context, cfg Youtube, track *models.Track) bool {
 	stream, err := getVideo(ctx, cfg, track.ID)
 	if err != nil {
 		slog.Error("failed getting stream for video", "trackID", track.ID, "context", err.Error())
