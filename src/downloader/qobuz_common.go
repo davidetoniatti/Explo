@@ -67,6 +67,7 @@ type saveOptions struct {
 	PathTemplate  string
 	CoversDir     string
 	EmbedCoverArt bool
+	Paths         *pathClaims
 	Service       string // log context only
 }
 
@@ -82,7 +83,7 @@ func saveStreamWithMetadata(httpClient *util.HttpClient, downloadURL string, tra
 	}
 	defer stream.Close()
 
-	tempFile := filepath.Join(downloadDir, track.File+".tmp")
+	tempFile := opts.Paths.claim(filepath.Join(downloadDir, track.File+".tmp"))
 	file, err := os.Create(tempFile)
 	if err != nil {
 		return err

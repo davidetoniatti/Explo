@@ -112,14 +112,16 @@ type SquidWTFQobuz struct {
 	CaptchaSolver *util.CaptchaSolver
 	DownloadDir   string
 	Cfg           config.Qobuz
+	paths         *pathClaims
 }
 
-func NewSquidWTFQobuz(cfg config.Qobuz, downloadDir string, httpClient *util.HttpClient) *SquidWTFQobuz {
+func NewSquidWTFQobuz(cfg config.Qobuz, downloadDir string, httpClient *util.HttpClient, paths *pathClaims) *SquidWTFQobuz {
 	return &SquidWTFQobuz{
 		HttpClient:    httpClient,
 		CaptchaSolver: util.NewCaptchaSolver(httpClient),
 		DownloadDir:   downloadDir,
 		Cfg:           cfg,
+		paths:         paths,
 	}
 }
 
@@ -241,6 +243,7 @@ func (c *SquidWTFQobuz) downloadAndSave(downloadURL string, track *models.Track)
 		PathTemplate:  c.Cfg.PathTemplate,
 		CoversDir:     c.Cfg.CoversDir,
 		EmbedCoverArt: c.Cfg.EmbedCoverArt,
+		Paths:         c.paths,
 		Service:       "squidwtf-qobuz",
 	})
 }

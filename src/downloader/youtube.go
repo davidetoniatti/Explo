@@ -48,9 +48,10 @@ type Youtube struct {
 	HttpClient  *util.HttpClient
 	Cfg         cfg.Youtube
 	gouTubeOpts goutubedl.Options
+	paths       *pathClaims
 }
 
-func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util.HttpClient) *Youtube { // init downloader cfg for youtube
+func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util.HttpClient, paths *pathClaims) *Youtube { // init downloader cfg for youtube
 	// check for custom ytdlp options
 	if cfg.YtdlpPath != "" {
 		goutubedl.Path = cfg.YtdlpPath
@@ -65,7 +66,8 @@ func NewYoutube(cfg cfg.Youtube, discovery, downloadDir string, httpClient *util
 		DownloadDir: downloadDir,
 		Cfg:         cfg,
 		HttpClient:  httpClient,
-		gouTubeOpts: opts}
+		gouTubeOpts: opts,
+		paths:       paths}
 }
 
 func (c *Youtube) QueryTrack(track *models.Track) error { // Queries youtube for the song
@@ -192,7 +194,7 @@ func saveVideo(c Youtube, track *models.Track, stream *goutubedl.DownloadResult)
 		}
 	}()
 
-	input := filepath.Join(c.DownloadDir, track.File+".tmp")
+	input := c.paths.claim(filepath.Join(c.DownloadDir, track.File+".tmp"))
 	file, err := os.Create(input)
 	if err != nil {
 		slog.Error("failed to create song file", "context", err.Error())
