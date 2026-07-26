@@ -123,7 +123,18 @@ func formatRecordJSON(n Notification) string {
 }
 
 // send notifications to services that have variables defined
+// notifyEnabled reports whether any notification channel is configured.
+func notifyEnabled(cfg config.NotifyConfig) bool {
+	return len(cfg.Discord.ChannelIDs) > 0 ||
+		cfg.Matrix.AccessToken != "" ||
+		len(cfg.Http.ReceiverURLs) > 0
+}
+
 func (c *NotificationClient) SendNotification(n Notification) {
+	if c == nil { // no channels configured
+		return
+	}
+
 	var errs []error
 
 	if len(c.Cfg.Discord.ChannelIDs) > 0 {

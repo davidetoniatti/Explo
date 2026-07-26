@@ -47,9 +47,28 @@ Run the Explo CLI tool using command-line flags and environment variables loaded
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--config` | `-c` | `.env` | Path to the configuration `.env` file. |
-| `--playlist` | | | The ListenBrainz playlist to fetch (`weekly-exploration`, `weekly-jams`, `daily-jams`). |
-| `--persist` | | `true` | Maintain a history of previous discovery playlists (keeps previous weeks/days in your media system). |
-| `--exclude-local`| | `true` | Skip downloading tracks that are already present in your target library. |
+| `--playlist` | `-p` | `weekly-exploration` | The ListenBrainz playlist to fetch (`weekly-exploration`, `weekly-jams`, `daily-jams`, `on-repeat`). |
+| `--download-mode` | `-d` | `normal` | `normal` downloads what is missing locally, `skip` only uses what is already there, `force` always downloads. |
+| `--replace-playlist` | | `true` | Replace the existing playlist of the same name. Set to `false` to keep a history instead, which date-stamps each run's playlist. |
+| `--clean-downloads` | | `false` | Delete previously downloaded tracks before downloading new ones. Requires `USE_SUBDIRECTORY=true`. |
+| `--exclude-local`| `-e` | `false` | Skip downloading tracks that are already present in your target library. |
+| `--refresh-only` | | `false` | Trigger a library rescan and exit, without discovering or downloading anything. |
+| `--search-mbid` | | | Resolve a MusicBrainz recording ID through ListenBrainz, report whether your library already holds it, and exit. A diagnostic for matching problems. |
+| `--version` | `-v` | | Print the version and exit. |
+
+`--persist` is deprecated. It means the opposite of `--replace-playlist` and is still
+honoured, so `--persist=true` is applied as `--replace-playlist=false`. The same goes
+for the `PERSIST` variable, superseded by `REPLACE_PLAYLIST`.
+
+Two things changed from the previous behaviour:
+
+- Playlists are now replaced in place and carry a stable name (`Weekly Exploration`)
+  rather than a date-stamped one (`Weekly Exploration Week30`). Pass
+  `--replace-playlist=false` to keep a dated history instead.
+- Deleting previously downloaded tracks is no longer bundled with replacing the
+  playlist. `--persist=false` used to do both; pass `--clean-downloads` alongside
+  `--replace-playlist` to keep deleting them. Explo warns if it detects the old
+  setting without the new flag.
 
 ### Running a Manual Run
 
@@ -142,7 +161,7 @@ services:
       - PUID=1000
       - PGID=1000
       - WEEKLY_EXPLORATION_SCHEDULE=0 3 * * 2
-      - WEEKLY_EXPLORATION_FLAGS=--playlist=weekly-exploration --persist=true
+      - WEEKLY_EXPLORATION_FLAGS=--playlist=weekly-exploration --replace-playlist=false
     restart: unless-stopped
 ```
 
