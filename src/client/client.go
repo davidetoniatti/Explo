@@ -70,9 +70,8 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	return c, nil
 }
 
-// TriggerRefresh asks the music system to rescan its library and waits for it to
-// settle. Used by --refresh-only, when tracks were added to the library by something
-// other than Explo.
+// TriggerRefresh asks the music system to rescan its library. Used by --refresh-only,
+// when tracks were added to the library by something other than Explo.
 func TriggerRefresh(cfg *config.Config) error {
 	c, err := NewClient(cfg)
 	if err != nil {
@@ -83,8 +82,11 @@ func TriggerRefresh(cfg *config.Config) error {
 		return fmt.Errorf("failed to trigger a library refresh: %w", err)
 	}
 
+	// Subsonic polls until the scan ends. Emby, jellyfin and plex report whether it had
+	// already finished when asked, and report false when they could not tell. MPD has no
+	// library to scan and always reports true.
 	if !c.API.CheckRefreshState() {
-		slog.Warn("library refresh did not complete in time", "system", c.System)
+		slog.Warn("could not confirm the library scan finished", "system", c.System)
 	}
 
 	return nil
