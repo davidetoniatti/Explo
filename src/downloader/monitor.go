@@ -72,6 +72,7 @@ func (c *DownloadClient) MonitorDownloads(tracks []*models.Track, m Monitor) err
 			}
 			fileStatus, exists := statuses[track.File]
 			tracker := progressMap[key]
+			monitoredTime := currentTime.Sub(tracker.LastUpdated)
 			if !exists {
 				tracker.Counter++
 
@@ -107,8 +108,8 @@ func (c *DownloadClient) MonitorDownloads(tracks []*models.Track, m Monitor) err
 				slog.Info("[monitor] progress updated", "service", monCfg.Service, "file", track.File, "bytes transferred", fileStatus.BytesTransferred)
 				continue
 
-			} else if currentTime.Sub(tracker.LastUpdated) > monCfg.MonitorDuration || strings.Contains(fileStatus.State, "Errored") || strings.Contains(fileStatus.State, "Cancelled") {
-				slog.Info("[monitor] no download progress for file, skipping", "service", monCfg.Service, "file", track.File, "duration", monCfg.MonitorDuration)
+			} else if monitoredTime > monCfg.MonitorDuration || fileStatus.State == "Errored" {
+				slog.Info("[monitor] no download progress for file, skipping", "service", monCfg.Service, "file", track.File, "state", fileStatus.State, "duration", monitoredTime)
 				tracker.Skipped = true
 				if err = m.Cleanup(*track, fileStatus.ID); err != nil {
 					slog.Debug("cleanup failed", logging.RuntimeAttr(err.Error()))
@@ -131,7 +132,7 @@ func tracksProcessed(tracks []*models.Track, progressMap map[string]*DownloadMon
 		key := fmt.Sprintf("%s|%s", track.ID, track.File)
 		tracker, exists := progressMap[key]
 		if !track.Present && exists && !tracker.Skipped {
-			slog.Info("file still present", "file", track.File)
+			slog.Info("[monitor] track download still in progress", "title", track.CleanTitle, "artist", track.MainArtist, "file", track.File)
 			return false
 		}
 	}

@@ -3,6 +3,7 @@ package downloader
 import (
 	"bytes" // Could be moved to util for all clients
 	"encoding/json"
+	"errors"
 	"explo/src/config"
 	"explo/src/logging"
 	"explo/src/models"
@@ -128,32 +129,65 @@ func (c *Slskd) GetConf() (MonitorConfig, error) {
 	}, nil
 }
 
+// errNoRes signals that a search completed but returned nothing at all, which is
+// the only case worth retrying with a looser query.
+var errNoRes = errors.New("no results found for query")
+
 func (c *Slskd) QueryTrack(track *models.Track) error {
-	ID, err := c.searchTrack(track)
-	if err != nil {
-		return err
+	queries := []string{fmt.Sprintf("%s - %s", track.CleanTitle, track.Artist)}
+	if wildcard := wildcardArtist(track.Artist); wildcard != track.Artist {
+		queries = append(queries, fmt.Sprintf("%s - %s", track.CleanTitle, wildcard))
 	}
-	trackDetails := fmt.Sprintf("%s - %s", track.CleanTitle, track.Artist)
-	slog.Info("initiating search", "track", trackDetails)
 
-	defer func() { // Delete search if ID is empty
-		if track.ID == "" {
-			if delErr := c.deleteSearch(ID); delErr != nil {
-				slog.Warn("failed to delete search", "service", "slskd", "context", delErr.Error())
-			}
+	for i, trackDetails := range queries {
+		ID, err := c.searchTrack(trackDetails)
+		if err != nil {
+			return err
 		}
-	}()
+		slog.Info("initiating search", "track", trackDetails)
 
-	completed, err := c.searchStatus(ID, trackDetails, 0)
-	if err != nil {
-		return err
-	}
-	if !completed {
+		completed, err := c.searchStatus(ID, trackDetails, 0)
+		if err == nil && completed {
+			track.ID = ID
+			return nil
+		}
+
+		if delErr := c.deleteSearch(ID); delErr != nil {
+			slog.Warn("failed to delete search", "service", "slskd", "context", delErr.Error())
+		}
+
+		if errors.Is(err, errNoRes) && i < len(queries)-1 {
+			slog.Debug("no result found with artist full name, trying with wildcard", "query", queries[i+1])
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("search not completed for %s, skipping track", trackDetails)
 	}
 
-	track.ID = ID
-	return nil
+	return errNoRes
+}
+
+// wildcardArtist replaces the first character of the artist name with '*', so slskd
+// can still match spelling variants peers use. A leading "The " is kept, since the
+// distinguishing part of the name comes after it.
+func wildcardArtist(artist string) string {
+	trimmed := strings.TrimSpace(artist)
+
+	prefix := ""
+	if len(trimmed) >= 4 && strings.EqualFold(trimmed[:4], "the ") {
+		prefix = trimmed[:4]
+		trimmed = strings.TrimSpace(trimmed[4:])
+	}
+
+	r := []rune(trimmed)
+	if len(r) < 3 { // too short to lose a character and still be searchable
+		return artist
+	}
+
+	r[0] = '*'
+	return prefix + string(r)
 }
 
 func (c *Slskd) GetTrack(track *models.Track) error {
@@ -175,7 +209,7 @@ func (c *Slskd) GetTrack(track *models.Track) error {
 	return nil
 }
 
-func (c Slskd) searchTrack(track *models.Track) (string, error) {
+func (c Slskd) searchTrack(trackDetails string) (string, error) {
 	reqParams := "/api/v0/searches"
 
 	type SearchRequest struct {
@@ -183,7 +217,7 @@ func (c Slskd) searchTrack(track *models.Track) (string, error) {
 	}
 
 	req := SearchRequest{
-		SearchText: fmt.Sprintf("%s - %s", track.CleanTitle, track.Artist),
+		SearchText: trackDetails,
 	}
 
 	payload, err := json.Marshal(req)
@@ -219,8 +253,10 @@ func (c Slskd) searchStatus(ID, trackDetails string, count int) (bool, error) { 
 		}
 		if queryResult.IsComplete && queryResult.FileCount > 0 {
 			return true, nil
-		} else if queryResult.IsComplete && (queryResult.FileCount == 0 || queryResult.FileCount == queryResult.LockedFileCount) {
-			return false, fmt.Errorf("search complete, did not find any available files for %s", trackDetails)
+		} else if queryResult.IsComplete && queryResult.FileCount == 0 {
+			return false, errNoRes
+		} else if queryResult.IsComplete && queryResult.FileCount == queryResult.LockedFileCount {
+			return false, fmt.Errorf("search complete, did not find any downloadable files for %s", trackDetails)
 		} else if count >= c.Cfg.Retry {
 			slog.Debug(fmt.Sprintf("search retries exhausted for %s", ID), logging.RuntimeAttr(""))
 			return false, fmt.Errorf("search wasn't completed after %d retries, skipping %s", count, trackDetails)
@@ -265,38 +301,42 @@ func (c Slskd) CollectFiles(track models.Track, searchResults SearchResults) ([]
 
 	files := slices.Collect(func(yield func(File) bool) {
 		for _, result := range searchResults {
-			if result.FileCount > 0 && result.HasFreeUploadSlot {
-				for _, file := range result.Files {
+			if result.FileCount == 0 || !result.HasFreeUploadSlot {
+				continue
+			}
+
+			for _, file := range result.Files {
+				// Prefer the extension from the filename, slskd peers often report it
+				// empty or wrong. AlnumOnly guards against bad chars in the name.
+				nameExt := util.AlnumOnly(strings.TrimPrefix(strings.ToLower(filepath.Ext(string(file.Name))), "."))
+				if nameExt != "" {
+					file.Extension = nameExt
+				} else {
 					file.Extension = strings.TrimPrefix(strings.ToLower(file.Extension), ".")
-					if file.Extension == "" {
-						extension := strings.TrimPrefix(strings.ToLower(filepath.Ext(string(file.Name))), ".")
-						file.Extension = util.AlnumOnly(extension) // sanitize extension incase of bad chars
-					}
+				}
 
-					if !slices.Contains(c.Cfg.Filters.Extensions, file.Extension) && ContainsKeyword(track, file.Name, c.Cfg.Filters.FilterList) {
-						continue
-					}
+				if !slices.Contains(c.Cfg.Filters.Extensions, file.Extension) || ContainsKeyword(track, file.Name, c.Cfg.Filters.FilterList) {
+					continue
+				}
 
-					if track.Duration > 0 && util.Abs(track.Duration/1000-file.Length) > 10 { // skip song if track lengths have a 10s+ difference
-						continue
-					}
+				if track.Duration > 0 && util.Abs(track.Duration/1000-file.Length) > 10 { // skip song if track lengths have a 10s+ difference
+					continue
+				}
 
-					sanitizedFilename := util.AlnumOnly(string(file.Name))
-					if (containsLower(sanitizedFilename, sanitizedArtist) || containsLower(sanitizedFilename, sanitizedAlbum)) && containsLower(sanitizedFilename, sanitizedTitle) {
-						file.Username = result.Username
-						if !yield(file) {
-							return
-						}
+				sanitizedFilename := util.AlnumOnly(string(file.Name))
+				if (containsLower(sanitizedFilename, sanitizedArtist) || containsLower(sanitizedFilename, sanitizedAlbum)) && containsLower(sanitizedFilename, sanitizedTitle) {
+					file.Username = result.Username
+					if !yield(file) {
+						return
 					}
 				}
 			}
 		}
 	})
-	if len(files) != 0 {
-		return files, nil
-	} else {
+	if len(files) == 0 {
 		return nil, fmt.Errorf("no tracks passed collection for %s - %s", track.MainArtist, track.CleanTitle)
 	}
+	return files, nil
 }
 
 func (c Slskd) filterFiles(files []File) ([]File, error) {
@@ -308,11 +348,11 @@ func (c Slskd) filterFiles(files []File) ([]File, error) {
 				continue
 			}
 
-			if file.BitRate > 0 && file.BitRate <= c.Cfg.Filters.MinBitRate {
+			if file.BitRate > 0 && file.BitRate < c.Cfg.Filters.MinBitRate {
 				continue
 			}
 
-			if file.BitDepth > 0 && file.BitDepth <= c.Cfg.Filters.MinBitDepth {
+			if file.BitDepth > 0 && file.BitDepth < c.Cfg.Filters.MinBitDepth {
 				continue
 			}
 
@@ -385,7 +425,7 @@ func (c *Slskd) GetDownloadStatus(tracks []*models.Track) (map[string]FileStatus
 						fileStatuses[track.File] = FileStatus{
 							ID:               file.ID,
 							Size:             file.Size,
-							State:            file.State,
+							State:            normalizeState(file.State),
 							BytesTransferred: file.BytesTransferred,
 							BytesRemaining:   file.BytesRemaining,
 							PercentComplete:  file.PercentComplete,
@@ -431,4 +471,26 @@ func parsePath(p string) (string, string) { // parse filepath to downloaded form
 	p = strings.ReplaceAll(p, `\`, `/`)
 	return filepath.Base(p), filepath.Base(filepath.Dir(p))
 
+}
+
+// slskd reports compound states such as "Completed, Rejected" or "Completed, Errored",
+// so a failure has to be recognised from any of the comma separated parts.
+var failureStates = map[string]struct{}{
+	"Aborted":   {},
+	"TimedOut":  {},
+	"Rejected":  {},
+	"Errored":   {},
+	"Cancelled": {},
+}
+
+// normalizeState collapses every slskd failure state into a single "Errored" value,
+// so the monitor can drop a dead download instead of waiting out MonitorDuration.
+func normalizeState(state string) string {
+	for part := range strings.SplitSeq(state, ",") {
+		if _, ok := failureStates[strings.TrimSpace(part)]; ok {
+			slog.Debug("[slskd] download failed", "status", state)
+			return "Errored"
+		}
+	}
+	return state
 }
