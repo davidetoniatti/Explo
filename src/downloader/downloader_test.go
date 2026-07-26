@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cfg "explo/src/config"
 	"explo/src/models"
 )
 
@@ -190,4 +191,61 @@ func TestIsDirEmpty(t *testing.T) {
 			t.Errorf("isDirEmpty() expected an error for a nonexistent path, got nil")
 		}
 	})
+}
+
+func TestTempAudioFile(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "extension is preserved so ffmpeg can infer the container",
+			path: "/downloads/Artist - Song.flac",
+			want: "/downloads/Artist - Song.tmp.flac",
+		},
+		{
+			name: "only the final extension is replaced",
+			path: "/downloads/Song.remastered.mp3",
+			want: "/downloads/Song.remastered.tmp.mp3",
+		},
+		{
+			name: "a dot in the directory name is not mistaken for an extension",
+			path: "/downloads/v1.2/Song.mp3",
+			want: "/downloads/v1.2/Song.tmp.mp3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tempAudioFile(tt.path)
+			if got != tt.want {
+				t.Errorf("tempAudioFile(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+			if filepath.Ext(got) != filepath.Ext(tt.path) {
+				t.Errorf("extension changed: %q -> %q", filepath.Ext(tt.path), filepath.Ext(got))
+			}
+		})
+	}
+}
+
+func TestOverwriteMetadataRejectsExtensionlessFile(t *testing.T) {
+	// ffmpeg picks the output container from the extension, so an extensionless
+	// source has to be refused up front rather than failing inside ffmpeg.
+	c := &DownloadClient{Cfg: &cfg.DownloadConfig{}}
+
+	// The file has to exist, otherwise ffmpeg would fail with "no such file" and the
+	// test would pass whether or not the extension guard is there at all.
+	srcFile := filepath.Join(t.TempDir(), "no_extension")
+	if err := os.WriteFile(srcFile, []byte("not really audio"), 0644); err != nil {
+		t.Fatalf("failed to set up test file: %v", err)
+	}
+
+	err := c.overwriteMetadata(srcFile, &models.Track{Title: "T"})
+	if err == nil {
+		t.Fatal("expected an error for a source file with no extension")
+	}
+	if !strings.Contains(err.Error(), "no extension") {
+		t.Errorf("expected the extension guard to reject it, got a different failure: %v", err)
+	}
 }

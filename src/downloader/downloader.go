@@ -14,6 +14,8 @@ import (
 	cfg "explo/src/config"
 	"explo/src/models"
 	"explo/src/util"
+
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 type DownloadClient struct {
@@ -194,6 +196,12 @@ func (c *DownloadClient) MoveDownload(srcDir, destDir, trackPath string, track *
 		track.File = getFilename(track.CleanTitle, track.MainArtist) + filepath.Ext(track.File)
 	}
 
+	if c.Cfg.OverwriteMetadata {
+		if err := c.overwriteMetadata(srcFile, track); err != nil {
+			slog.Warn("failed to overwrite metadata", "file", srcFile, "context", err.Error())
+		}
+	}
+
 	in, err := os.Open(srcFile)
 	if err != nil {
 		return fmt.Errorf("couldn't open source file: %s", err.Error())
@@ -255,6 +263,53 @@ func (c *DownloadClient) MoveDownload(srcDir, destDir, trackPath string, track *
 		}
 	}
 	return nil
+}
+
+// overwriteMetadata rewrites srcFile's tags from the discovery metadata, replacing
+// whatever the download source wrote. ffmpeg cannot edit in place, so the result goes
+// to a sibling temp file that is renamed over the original once it is complete.
+func (c *DownloadClient) overwriteMetadata(srcFile string, track *models.Track) error {
+	// ffmpeg infers the output container from the file extension, so without one it
+	// cannot write the temp file at all.
+	if filepath.Ext(srcFile) == "" {
+		return fmt.Errorf("cannot infer container format for %q, file has no extension", srcFile)
+	}
+
+	tmpFile := tempAudioFile(srcFile)
+
+	removeTmp := func() {
+		if err := os.Remove(tmpFile); err != nil && !os.IsNotExist(err) {
+			slog.Warn("failed to remove temp file", "file", tmpFile, "context", err.Error())
+		}
+	}
+
+	opts := ffmpeg.KwArgs{
+		"c":        "copy",
+		"metadata": util.BuildffmpegMetadata(*track),
+		"loglevel": "error",
+	}
+	streams := []*ffmpeg.Stream{ffmpeg.Input(srcFile)}
+
+	if err := util.WriteMetadata(streams, c.Cfg.FfmpegPath, tmpFile, opts); err != nil {
+		removeTmp() // ffmpeg may have written a partial file before failing
+		return err
+	}
+
+	if err := os.Rename(tmpFile, srcFile); err != nil {
+		// Leaving the temp file behind would also keep the source directory from
+		// being cleaned up once the download is moved.
+		removeTmp()
+		return fmt.Errorf("failed to replace original file: %w", err)
+	}
+
+	return nil
+}
+
+// tempAudioFile returns a sibling path with the same extension, so ffmpeg keeps
+// inferring the container format from it.
+func tempAudioFile(path string) string {
+	ext := filepath.Ext(path)
+	return strings.TrimSuffix(path, ext) + ".tmp" + ext
 }
 
 func isDirEmpty(path string) (bool, error) {

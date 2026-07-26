@@ -235,5 +235,5 @@ func (c *SquidWTFQobuz) getDownloadURL(trackID, quality string, forceRefresh boo
 }
 
 func (c *SquidWTFQobuz) downloadAndSave(downloadURL string, track *models.Track) error {
-	return saveStreamWithMetadata(c.HttpClient, c.DownloadDir, downloadURL, track, "squidwtf-qobuz")
+	return saveStreamWithMetadata(c.HttpClient, c.DownloadDir, downloadURL, c.Cfg.FfmpegPath, track, "squidwtf-qobuz")
 }
