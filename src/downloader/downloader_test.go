@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	cfg "explo/src/config"
@@ -512,6 +513,84 @@ func TestBuildAudioOutputRunsUnderFfmpeg(t *testing.T) {
 		}
 		if !strings.Contains(string(probe), "1") {
 			t.Errorf("expected an attached picture in the output, ffprobe said %q", probe)
+		}
+	})
+}
+
+func TestPathClaims(t *testing.T) {
+	t.Run("a free path is returned unchanged", func(t *testing.T) {
+		p := newPathClaims()
+
+		if got := p.claim("/music/Song.flac"); got != "/music/Song.flac" {
+			t.Errorf("claim() = %q, want the path unchanged", got)
+		}
+	})
+
+	t.Run("a taken path gets a suffix before the extension", func(t *testing.T) {
+		p := newPathClaims()
+		p.claim("/music/Song.flac")
+
+		if got := p.claim("/music/Song.flac"); got != "/music/Song-2.flac" {
+			t.Errorf("claim() = %q, want /music/Song-2.flac", got)
+		}
+		if got := p.claim("/music/Song.flac"); got != "/music/Song-3.flac" {
+			t.Errorf("claim() = %q, want /music/Song-3.flac", got)
+		}
+	})
+
+	t.Run("different paths do not interfere", func(t *testing.T) {
+		p := newPathClaims()
+
+		if got := p.claim("/music/A.flac"); got != "/music/A.flac" {
+			t.Errorf("claim() = %q", got)
+		}
+		if got := p.claim("/music/B.flac"); got != "/music/B.flac" {
+			t.Errorf("claim() = %q", got)
+		}
+	})
+
+	t.Run("a path with no extension is still suffixed", func(t *testing.T) {
+		p := newPathClaims()
+		p.claim("/music/Song")
+
+		if got := p.claim("/music/Song"); got != "/music/Song-2" {
+			t.Errorf("claim() = %q, want /music/Song-2", got)
+		}
+	})
+
+	t.Run("a temp suffix keeps its extension order", func(t *testing.T) {
+		// The download sites claim "<file>.tmp", so the suffix lands before ".tmp"
+		p := newPathClaims()
+		p.claim("/music/Song.opus.tmp")
+
+		if got := p.claim("/music/Song.opus.tmp"); got != "/music/Song.opus-2.tmp" {
+			t.Errorf("claim() = %q, want /music/Song.opus-2.tmp", got)
+		}
+	})
+
+	t.Run("every concurrent caller gets a distinct path", func(t *testing.T) {
+		// This is the point of the type: downloads for one service run concurrently, and
+		// two tracks sharing a title and artist render the same name with no template set.
+		const callers = 50
+		p := newPathClaims()
+
+		var wg sync.WaitGroup
+		results := make([]string, callers)
+		for i := range callers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				results[i] = p.claim("/music/Song.flac")
+			}()
+		}
+		wg.Wait()
+
+		seen := make(map[string]struct{}, callers)
+		for _, path := range results {
+			if _, dup := seen[path]; dup {
+				t.Fatalf("two callers were handed the same path: %q", path)
+			}
+			seen[path] = struct{}{}
 		}
 	})
 }

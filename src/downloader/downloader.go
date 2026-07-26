@@ -22,6 +22,7 @@ import (
 type DownloadClient struct {
 	Cfg         *cfg.DownloadConfig
 	Downloaders []Downloader
+	paths       *pathClaims
 }
 
 type Downloader interface {
@@ -31,19 +32,24 @@ type Downloader interface {
 
 // get download services from config and append them to DownloadClient
 func NewDownloader(cfg *cfg.DownloadConfig, httpClient *util.HttpClient, filterLocal bool) (*DownloadClient, error) {
+	// One set of claims for the whole run: services are tried in order and all write
+	// into the same download directory, so a youtube download and a migrated slskd one
+	// can collide just as easily as two tracks from one service.
+	paths := newPathClaims()
+
 	var downloader []Downloader
 	for _, service := range cfg.Services {
 		switch service {
 		case "youtube":
-			downloader = append(downloader, NewYoutube(cfg.Youtube, cfg.Discovery, cfg.DownloadDir, httpClient))
+			downloader = append(downloader, NewYoutube(cfg.Youtube, cfg.Discovery, cfg.DownloadDir, httpClient, paths))
 		case "slskd":
 			slskdClient := NewSlskd(cfg.Slskd, cfg.DownloadDir)
 			slskdClient.AddHeader()
 			downloader = append(downloader, slskdClient)
 		case "squidwtf-qobuz":
-			downloader = append(downloader, NewSquidWTFQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient))
+			downloader = append(downloader, NewSquidWTFQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient, paths))
 		case "qobuz":
-			downloader = append(downloader, NewQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient))
+			downloader = append(downloader, NewQobuz(cfg.Qobuz, cfg.DownloadDir, httpClient, paths))
 		default:
 			return nil, fmt.Errorf("downloader '%s' not supported", service)
 		}
@@ -51,7 +57,8 @@ func NewDownloader(cfg *cfg.DownloadConfig, httpClient *util.HttpClient, filterL
 
 	return &DownloadClient{
 		Cfg:         cfg,
-		Downloaders: downloader}, nil
+		Downloaders: downloader,
+		paths:       paths}, nil
 }
 
 func (c *DownloadClient) StartDownload(tracks *[]*models.Track) {
@@ -224,6 +231,12 @@ func (c *DownloadClient) MoveDownload(srcDir, destDir, trackPath string, track *
 			track.File = filepath.Base(relPath)
 			track.RelPath = relPath
 		}
+	}
+
+	dstFile = c.paths.claim(dstFile)
+	track.File = filepath.Base(dstFile)
+	if track.RelPath != "" {
+		track.RelPath = filepath.Join(filepath.Dir(track.RelPath), track.File)
 	}
 
 	if err = os.MkdirAll(filepath.Dir(dstFile), os.ModePerm); err != nil {
