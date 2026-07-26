@@ -1,13 +1,13 @@
 package discovery
 
 import (
-	"explo/src/models"
 	cfg "explo/src/config"
+	"explo/src/models"
 	"explo/src/util"
 )
 
 type DiscoverClient struct {
-	cfg *cfg.DiscoveryConfig
+	cfg       *cfg.DiscoveryConfig
 	Discovery Discovery
 }
 type Discovery interface {

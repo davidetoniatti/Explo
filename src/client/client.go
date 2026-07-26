@@ -108,7 +108,7 @@ func (c *Client) systemSetup() error {
 			}
 
 		}
-		
+
 		if err := c.API.AddHeader(); err != nil {
 			return err
 		}
