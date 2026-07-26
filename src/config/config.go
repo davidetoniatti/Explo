@@ -75,17 +75,22 @@ type SubsonicConfig struct {
 	PublicPlaylist bool   `env:"PUBLIC_PLAYLIST" env-default:"false"`
 }
 
+// FFMPEG_PATH is bound here and on each downloader that shells out to ffmpeg, so
+// every downloader stays self-contained. cleanenv fills all of them from the one
+// variable, they cannot diverge.
 type DownloadConfig struct {
-	DownloadDir     string `env:"DOWNLOAD_DIR" env-default:"/data/"`
-	Youtube         Youtube
-	Slskd           Slskd
-	Qobuz           Qobuz
-	ExcludeLocal    bool
-	KeepPermissions bool     `env:"KEEP_PERMISSIONS" env-default:"true"` // keep original file permissions when migrating download
-	RenameTrack     bool     `env:"RENAME_TRACK" env-default:"false"`    // Rename track in {title}-{artist} format
-	UseSubDir       bool     `env:"USE_SUBDIRECTORY" env-default:"true"`
-	Discovery       string   `env:"LISTENBRAINZ_DISCOVERY" env-default:"playlist"`
-	Services        []string `env:"DOWNLOAD_SERVICES" env-default:"youtube"`
+	DownloadDir       string `env:"DOWNLOAD_DIR" env-default:"/data/"`
+	FfmpegPath        string `env:"FFMPEG_PATH"`
+	Youtube           Youtube
+	Slskd             Slskd
+	Qobuz             Qobuz
+	ExcludeLocal      bool
+	OverwriteMetadata bool     `env:"OVERWRITE_METADATA" env-default:"false"` // replace downloaded metadata with discovery metadata when migrating
+	KeepPermissions   bool     `env:"KEEP_PERMISSIONS" env-default:"true"`    // keep original file permissions when migrating download
+	RenameTrack       bool     `env:"RENAME_TRACK" env-default:"false"`       // Rename track in {title}-{artist} format
+	UseSubDir         bool     `env:"USE_SUBDIRECTORY" env-default:"true"`
+	Discovery         string   `env:"LISTENBRAINZ_DISCOVERY" env-default:"playlist"`
+	Services          []string `env:"DOWNLOAD_SERVICES" env-default:"youtube"`
 }
 
 type Filters struct {
@@ -99,6 +104,7 @@ type Qobuz struct {
 	Quality       string `env:"QOBUZ_QUALITY" env-default:"27"`
 	UserAuthToken string `env:"QOBUZ_USER_AUTH_TOKEN"`
 	UserId        string `env:"QOBUZ_USER_ID"`
+	FfmpegPath    string `env:"FFMPEG_PATH"`
 	Filters       Filters
 }
 
@@ -133,13 +139,15 @@ type DiscoveryConfig struct {
 	Listenbrainz Listenbrainz
 }
 type Listenbrainz struct {
-	Discovery      string `env:"LISTENBRAINZ_DISCOVERY" env-default:"playlist"`
-	User           string `env:"LISTENBRAINZ_USER"`
-	ImportPlaylist string
-	SingleArtist   bool          `env:"SINGLE_ARTIST" env-default:"true"`
-	RetryAttempts  int           `env:"LISTENBRAINZ_RETRY_ATTEMPTS" env-default:"5"`
-	RetryBaseDelay time.Duration `env:"LISTENBRAINZ_RETRY_BASE_DELAY" env-default:"15s"`
-	RetryMaxDelay  time.Duration `env:"LISTENBRAINZ_RETRY_MAX_DELAY" env-default:"5m"`
+	Discovery           string `env:"LISTENBRAINZ_DISCOVERY" env-default:"playlist"`
+	User                string `env:"LISTENBRAINZ_USER"`
+	ImportPlaylist      string
+	SingleArtist        bool          `env:"SINGLE_ARTIST" env-default:"true"`
+	CoverArtSize        string        `env:"COVER_ART_SIZE" env-default:"250"`
+	EnrichTrackMetadata bool          `env:"ENRICH_TRACK_METADATA" env-default:"false"`
+	RetryAttempts       int           `env:"LISTENBRAINZ_RETRY_ATTEMPTS" env-default:"5"`
+	RetryBaseDelay      time.Duration `env:"LISTENBRAINZ_RETRY_BASE_DELAY" env-default:"15s"`
+	RetryMaxDelay       time.Duration `env:"LISTENBRAINZ_RETRY_MAX_DELAY" env-default:"5m"`
 }
 
 type NotifyConfig struct {

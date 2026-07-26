@@ -4,14 +4,40 @@ package models
 
 type Track struct {
 	Album        string
+	AlbumArtist  string
 	ID           string
-	Artist       string // All artists as returned by LB
+	Artist       string   // All artists as returned by LB
+	Artists      []string // Individual artist credits, when not collapsed into a single artist
 	MainArtist   string
 	MainArtistID string
+	ArtistSort   string
 	CleanTitle   string // Title as returned by LB
 	Title        string // Title as built in listenbrainz.go
 	File         string // File name
 	Size         int    // File size
 	Present      bool   // is track present in the system or not
 	Duration     int    // Track duration in milliseconds (not available for every track)
+
+	CoverURL  string // External cover art URL (Cover Art Archive), used at run-time to download art
+	CoverPath string // Filesystem path of the downloaded cover art
+
+	ReleaseCountry string
+	ReleaseStatus  string
+	ReleaseType    string
+	OriginalDate   string
+	OriginalYear   int
+	Genres         string // Top genres, joined with "; "
+	ISRCs          []string
+	Media          string // Media format (e.g., CD, Digital Media)
+	TrackNumber    int    // Track position in media
+	TrackTotal     int    // Total tracks in media
+	DiscNumber     int    // Disc/media position
+	DiscTotal      int    // Total discs/media
+
+	MusicBrainzTrackID        string // Recording MBID
+	MusicBrainzReleaseTrackID string // Track-in-release MBID
+	MusicBrainzAlbumID        string // Release MBID
+	MusicBrainzReleaseGroupID string
+	MusicBrainzArtistID       string
+	MusicBrainzAlbumArtistID  string
 }

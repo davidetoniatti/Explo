@@ -65,8 +65,9 @@ func pickBestQobuzTrack(track *models.Track, items []QobuzTrack, filterList []st
 // saveStreamWithMetadata downloads downloadURL to a temp file in downloadDir, then uses
 // ffmpeg to copy the audio stream and write id3/vorbis metadata to track.File. If ffmpeg
 // fails, the temp file is moved into place as-is rather than lost. Shared by the native
-// qobuz and squidwtf-qobuz downloaders. service is used only for log context.
-func saveStreamWithMetadata(httpClient *util.HttpClient, downloadDir, downloadURL string, track *models.Track, service string) error {
+// qobuz and squidwtf-qobuz downloaders. ffmpegPath may be empty to use PATH, service is
+// used only for log context.
+func saveStreamWithMetadata(httpClient *util.HttpClient, downloadDir, downloadURL, ffmpegPath string, track *models.Track, service string) error {
 	stream, err := httpClient.GetStream(downloadURL, nil)
 	if err != nil {
 		return err
@@ -93,15 +94,16 @@ func saveStreamWithMetadata(httpClient *util.HttpClient, downloadDir, downloadUR
 	destPath := filepath.Join(downloadDir, track.File)
 
 	// Use ffmpeg to write metadata
-	cmd := ffmpeg.Input(tempFile).Output(destPath, ffmpeg.KwArgs{
+	opts := ffmpeg.KwArgs{
 		"map":      "0:a",
 		"c:a":      "copy",
-		"metadata": []string{"artist=" + track.Artist, "title=" + track.Title, "album=" + track.Album},
+		"metadata": util.BuildffmpegMetadata(*track),
 		"loglevel": "error",
-	}).OverWriteOutput().ErrorToStdOut()
+	}
+	streams := []*ffmpeg.Stream{ffmpeg.Input(tempFile)}
 
-	if err = cmd.Run(); err != nil {
-		slog.Error("failed to write metadata", "service", service, "context", err.Error())
+	if err = util.WriteMetadata(streams, ffmpegPath, destPath, opts); err != nil {
+		slog.Error("saving track failed", "service", service, "context", err.Error())
 		// If ffmpeg fails, try to at least move the original file so it's not lost
 		if rerr := os.Rename(tempFile, destPath); rerr != nil {
 			return fmt.Errorf("ffmpeg failed (%s) and fallback rename also failed: %w", err.Error(), rerr)
