@@ -61,6 +61,18 @@ func (c *MPD) SearchSongs(tracks []*models.Track) error {
 			continue
 		}
 
+		// A download organised by PATH_TEMPLATE knows exactly where it was written.
+		// Trust that over the file name, which several albums can share once the
+		// template drops the artist from it (two "01 - Intro.flac", say).
+		if tracks[i].RelPath != "" {
+			fullPath := filepath.Join(c.Cfg.DownloadDir, tracks[i].RelPath)
+			if _, err := os.Stat(fullPath); err == nil {
+				tracks[i].File = fullPath
+				tracks[i].Present = true
+				continue
+			}
+		}
+
 		if fullPath, ok := fileMap[tracks[i].File]; ok {
 			tracks[i].File = fullPath
 			tracks[i].Present = true

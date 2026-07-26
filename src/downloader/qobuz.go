@@ -372,5 +372,12 @@ func (c *Qobuz) tryGetDownloadURL(trackID string, formatId int, secret string) (
 }
 
 func (c *Qobuz) downloadAndSave(downloadURL string, track *models.Track) error {
-	return saveStreamWithMetadata(c.HttpClient, c.DownloadDir, downloadURL, c.Cfg.FfmpegPath, track, "qobuz")
+	return saveStreamWithMetadata(c.HttpClient, downloadURL, track, saveOptions{
+		DownloadDir:   c.DownloadDir,
+		FfmpegPath:    c.Cfg.FfmpegPath,
+		PathTemplate:  c.Cfg.PathTemplate,
+		CoversDir:     c.Cfg.CoversDir,
+		EmbedCoverArt: c.Cfg.EmbedCoverArt,
+		Service:       "qobuz",
+	})
 }
